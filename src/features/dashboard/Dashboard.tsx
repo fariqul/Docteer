@@ -92,7 +92,7 @@ const moduleCards: ModuleCard[] = [
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
-  const { setStaff } = useAuthStore()
+  const { setStaff, staffByDepartment } = useAuthStore()
   const { sidebarOpen } = useUIStore()
   const [selectedModule, setSelectedModule] = useState<ModuleCard | null>(null)
 
@@ -188,18 +188,27 @@ export const Dashboard: React.FC = () => {
       <div className="max-w-7xl mx-auto px-6 py-8">
         <h3 className="text-title text-surface-800 mb-4">Status Ruangan</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {moduleCards.map((module) => (
-            <Card key={module.id} className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full bg-surface-300`} />
-                <div>
-                  <p className="font-medium text-surface-800">{module.name}</p>
-                  <p className="text-sm text-surface-500">Belum ada petugas</p>
+          {moduleCards.map((module) => {
+            const staff = staffByDepartment[module.department]
+            const isOnline = !!staff
+
+            return (
+              <Card key={module.id} className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={cn("w-3 h-3 rounded-full", isOnline ? "bg-emerald-500" : "bg-surface-300")} />
+                  <div>
+                    <p className="font-medium text-surface-800">{module.name}</p>
+                    <p className="text-sm text-surface-500">
+                      {isOnline ? `Petugas: ${staff.name}` : 'Belum ada petugas'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <Badge variant="default" size="sm">Offline</Badge>
-            </Card>
-          ))}
+                <Badge variant={isOnline ? 'primary' : 'default'} size="sm">
+                  {isOnline ? 'Online' : 'Offline'}
+                </Badge>
+              </Card>
+            )
+          })}
         </div>
       </div>
 
