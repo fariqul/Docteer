@@ -125,13 +125,12 @@ export const Dashboard: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 py-12">
           <div className="flex items-start justify-between">
             <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                  <span className="text-2xl font-bold">D</span>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
+                <div className="h-20 w-64 bg-white rounded-2xl flex items-center justify-center p-3 shadow-md">
+                  <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain" />
                 </div>
                 <div>
-                  <h1 className="text-3xl font-bold">Docteer</h1>
-                  <p className="text-primary-100 text-sm">Sistem Informasi Klinik & Antrian</p>
+                  <p className="text-primary-100 text-body-lg font-medium">Sistem Informasi Klinik & Antrean Realtime</p>
                 </div>
               </div>
               <h2 className="text-headline text-white/90 mb-1">{getGreeting()}</h2>

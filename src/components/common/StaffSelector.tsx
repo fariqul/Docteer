@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Search, User } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import type { Staff } from '../../types/database'
 
@@ -61,8 +61,8 @@ export const StaffSelector: React.FC<StaffSelectorProps> = ({ department: _depar
     <div className="min-h-screen bg-surface-50 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <User className="w-8 h-8 text-primary-600" />
+          <div className="h-28 w-80 bg-white border border-surface-200 rounded-3xl flex items-center justify-center mx-auto mb-6 p-4 shadow-md">
+            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain" />
           </div>
           <h1 className="text-headline text-surface-800 mb-2">Pilih Petugas</h1>
           <p className="text-surface-500">Ketik nama untuk mencari petugas</p>

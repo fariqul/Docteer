@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { Wifi, WifiOff, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { getDepartmentLabel } from '../../lib/utils'
+import { getDepartmentLabel, generateVoiceText } from '../../lib/utils'
 import type { Queue } from '../../types/database'
 
 const departmentMap: Record<string, string> = {
-  tensi: 'triage',
+  tansi: 'triage',
   lab: 'lab',
   'poli-umum': 'poli_umum',
   'poli-gigi': 'poli_gigi',
@@ -25,6 +25,8 @@ export const DisplayMonitor: React.FC = () => {
   const [displayTitle, setDisplayTitle] = useState('')
   const [customBgColor, setCustomBgColor] = useState('')
   const [runningText, setRunningText] = useState('Selamat datang di Docteer Clinic — Bakti Sosial Puskesmas oleh Mahasiswa Kedokteran')
+
+  const lastCalledAtRef = useRef<string | null>(null)
 
   // Clock
   useEffect(() => {
@@ -49,26 +51,33 @@ export const DisplayMonitor: React.FC = () => {
     fetchQueueData()
     fetchDisplaySettings()
 
-    // Supabase Realtime subscription
+    // Supabase Realtime subscription (broad channels for maximum reliability)
     const channel = supabase
-      .channel(`display-${department}`)
+      .channel(`display-channel-${department}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'queues', filter: `department=eq.${department}` },
-        () => {
-          fetchQueueData()
+        { event: '*', schema: 'public', table: 'queues' },
+        (payload: any) => {
+          const newRec = payload.new as any
+          const oldRec = payload.old as any
+          if (
+            (newRec && newRec.department === department) ||
+            (oldRec && oldRec.department === department)
+          ) {
+            fetchQueueData()
+          }
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'display_settings', filter: `department=eq.${department}` },
+        { event: '*', schema: 'public', table: 'display_settings' },
         () => {
           fetchDisplaySettings()
         }
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'running_texts', filter: `department=eq.${department}` },
+        { event: '*', schema: 'public', table: 'running_texts' },
         () => {
           fetchDisplaySettings()
         }
@@ -108,6 +117,16 @@ export const DisplayMonitor: React.FC = () => {
     }
   }
 
+  const playVoiceCall = (queueNumber: string, patientName: string) => {
+    if ('speechSynthesis' in window) {
+      const text = generateVoiceText(queueNumber, patientName, department)
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = 'id-ID'
+      utterance.rate = 0.9
+      speechSynthesis.speak(utterance)
+    }
+  }
+
   const fetchQueueData = async () => {
     try {
       // Get called/in_progress (current)
@@ -120,7 +139,14 @@ export const DisplayMonitor: React.FC = () => {
         .limit(1)
 
       if (current && current.length > 0) {
-        setCurrentQueue(current[0])
+        const calledQueue = current[0]
+        setCurrentQueue(calledQueue)
+
+        // Check if this is a newly called queue or a recalled queue
+        if (calledQueue.status === 'called' && calledQueue.called_at !== lastCalledAtRef.current) {
+          lastCalledAtRef.current = calledQueue.called_at
+          playVoiceCall(calledQueue.queue_number, calledQueue.patient?.name || '')
+        }
       } else {
         setCurrentQueue(null)
       }
@@ -158,13 +184,13 @@ export const DisplayMonitor: React.FC = () => {
     >
       {/* Header */}
       <div className="flex items-center justify-between px-8 py-5 bg-black/20">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 bg-white/20 rounded-xl flex items-center justify-center">
-            <span className="text-white font-bold text-2xl">D</span>
+        <div className="flex items-center gap-6">
+          <div className="h-20 w-64 bg-white rounded-2xl flex items-center justify-center p-3 shadow-md flex-shrink-0">
+            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-auto object-contain" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold">{displayTitle || 'Docteer'}</h1>
-            <p className="text-primary-200 text-sm">{getDepartmentLabel(department)}</p>
+            <h1 className="text-3xl font-extrabold">{displayTitle || 'Layar Antrean'}</h1>
+            <p className="text-primary-200 text-lg font-semibold">{getDepartmentLabel(department)}</p>
           </div>
         </div>
         <div className="flex items-center gap-6">

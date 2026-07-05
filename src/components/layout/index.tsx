@@ -126,15 +126,12 @@ export const Sidebar: React.FC = () => {
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-surface-100">
-          <div className="w-10 h-10 bg-gradient-to-br from-primary-400 to-accent-400 rounded-xl flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-lg">D</span>
+        <div className="flex flex-col items-center justify-center px-4 py-6 border-b border-surface-100 bg-white">
+          <div className={cn("h-16 w-full flex items-center justify-center", !sidebarOpen && "h-10")}>
+            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-auto object-contain" />
           </div>
           {sidebarOpen && (
-            <div className="animate-fade-in">
-              <h1 className="font-bold text-lg text-surface-800">Docteer</h1>
-              <p className="text-xs text-surface-400">Sistem Klinik</p>
-            </div>
+            <p className="text-[10px] font-bold text-surface-400 mt-2 tracking-wider uppercase">Sistem Klinik & Antrean</p>
           )}
         </div>
 

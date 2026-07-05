@@ -428,6 +428,13 @@ ALTER TABLE activity_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE system_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE display_settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE running_texts DISABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_logs DISABLE ROW LEVEL SECURITY;
+
+-- Enable Supabase Realtime for display screens
+alter publication supabase_realtime add table queues;
+alter publication supabase_realtime add table display_settings;
+alter publication supabase_realtime add table running_texts;
+
 ALTER TABLE reports DISABLE ROW LEVEL SECURITY;
 ALTER TABLE backup_logs DISABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_shifts DISABLE ROW LEVEL SECURITY;

@@ -16,7 +16,7 @@ import { Button, Input, Card, CardHeader, Badge, DataTable } from '../../compone
 import { Modal } from '../../components/ui'
 import { useAuthStore } from '../../stores'
 import { supabase } from '../../lib/supabase'
-import { formatTime, getStatusLabel, generateVoiceText } from '../../lib/utils'
+import { formatTime, getStatusLabel } from '../../lib/utils'
 import type { Queue } from '../../types/database'
 
 const vitalSignsSchema = z.object({
@@ -84,14 +84,6 @@ export const Triage: React.FC = () => {
       fetchQueue()
     } catch (err) {
       console.error(err)
-    }
-
-    if ('speechSynthesis' in window) {
-      const text = generateVoiceText(queue.queue_number, queue.patient?.name || '', 'triage')
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'id-ID'
-      utterance.rate = 0.9
-      speechSynthesis.speak(utterance)
     }
     setSelectedQueue(queue)
   }

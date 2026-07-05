@@ -9,7 +9,7 @@ import { PageLayout } from '../../components/layout'
 import { Button, Card, CardHeader, Badge } from '../../components/ui'
 import { useAuthStore } from '../../stores'
 import { supabase } from '../../lib/supabase'
-import { formatTime, getStatusLabel, generateVoiceText } from '../../lib/utils'
+import { formatTime, getStatusLabel } from '../../lib/utils'
 import type { Prescription } from '../../types/database'
 
 export const Pharmacy: React.FC = () => {
@@ -79,16 +79,6 @@ export const Pharmacy: React.FC = () => {
       fetchPrescriptions()
     } catch (err) {
       console.error(err)
-    }
-
-    if ('speechSynthesis' in window) {
-      const patientName = (rx as any).visit?.patient?.name || ''
-      const queueNum = (rx as any).visit?.queue_number || ''
-      const text = generateVoiceText(queueNum, patientName, 'pharmacy')
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'id-ID'
-      utterance.rate = 0.9
-      speechSynthesis.speak(utterance)
     }
   }
 

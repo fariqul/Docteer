@@ -14,7 +14,7 @@ import { Button, Input, Card, CardHeader, Badge, DataTable } from '../../compone
 import { Modal } from '../../components/ui'
 import { useAuthStore } from '../../stores'
 import { supabase } from '../../lib/supabase'
-import { formatTime, getStatusLabel, generateVoiceText } from '../../lib/utils'
+import { formatTime, getStatusLabel } from '../../lib/utils'
 import type { Queue, Medicine } from '../../types/database'
 
 interface PrescriptionItemInput {
@@ -111,14 +111,6 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
       fetchQueue()
     } catch (err) {
       console.error(err)
-    }
-
-    if ('speechSynthesis' in window) {
-      const text = generateVoiceText(queue.queue_number, queue.patient?.name || '', department)
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = 'id-ID'
-      utterance.rate = 0.9
-      speechSynthesis.speak(utterance)
     }
   }
 
