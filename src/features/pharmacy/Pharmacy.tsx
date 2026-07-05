@@ -156,7 +156,7 @@ export const Pharmacy: React.FC = () => {
         .select('*')
         .eq('visit_id', rx.visit_id)
         .eq('department', 'pharmacy')
-        .eq('status', 'waiting')
+        .in('status', ['waiting', 'called', 'in_progress'])
         .limit(1)
 
       if (queues && queues.length > 0) {
