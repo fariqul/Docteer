@@ -125,7 +125,7 @@ export const MedicineManagement: React.FC = () => {
   const [showBatchesModal, setShowBatchesModal] = useState(false)
   const [showBatchForm, setShowBatchForm] = useState(false)
   const [editingBatch, setEditingBatch] = useState<any | null>(null)
-  const [batchFormData, setBatchFormData] = useState({ batch_number: '', expired_at: '', current_stock: 0 })
+  const [batchFormData, setBatchFormData] = useState({ batch_number: '', expired_date: '', current_stock: 0 })
 
   useEffect(() => { fetchMedicines() }, [])
 
@@ -150,7 +150,7 @@ export const MedicineManagement: React.FC = () => {
         .from('medicine_batches')
         .select('*')
         .eq('medicine_id', medicineId)
-        .order('expired_at', { ascending: true })
+        .order('expired_date', { ascending: true })
       setBatchesList(data || [])
     } catch (err) {
       console.error(err)
@@ -165,7 +165,7 @@ export const MedicineManagement: React.FC = () => {
 
   const handleOpenAddBatch = () => {
     setEditingBatch(null)
-    setBatchFormData({ batch_number: '', expired_at: new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0], current_stock: 100 })
+    setBatchFormData({ batch_number: '', expired_date: new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0], current_stock: 100 })
     setShowBatchForm(true)
   }
 
@@ -173,7 +173,7 @@ export const MedicineManagement: React.FC = () => {
     setEditingBatch(batch)
     setBatchFormData({
       batch_number: batch.batch_number,
-      expired_at: batch.expired_at,
+      expired_date: batch.expired_date,
       current_stock: batch.current_stock
     })
     setShowBatchForm(true)
@@ -188,7 +188,7 @@ export const MedicineManagement: React.FC = () => {
           .from('medicine_batches')
           .update({
             batch_number: batchFormData.batch_number,
-            expired_at: batchFormData.expired_at,
+            expired_date: batchFormData.expired_date,
             current_stock: batchFormData.current_stock,
             initial_stock: batchFormData.current_stock
           })
@@ -199,7 +199,7 @@ export const MedicineManagement: React.FC = () => {
           .insert({
             medicine_id: selectedMedicineForBatches.id,
             batch_number: batchFormData.batch_number,
-            expired_at: batchFormData.expired_at,
+            expired_date: batchFormData.expired_date,
             initial_stock: batchFormData.current_stock,
             current_stock: batchFormData.current_stock
           })
@@ -306,7 +306,7 @@ export const MedicineManagement: React.FC = () => {
           <DataTable
             columns={[
               { key: 'batch_number', header: 'No. Batch', render: (b) => <span className="font-semibold font-mono">{b.batch_number}</span> },
-              { key: 'expired_at', header: 'Tgl. Expired', render: (b) => formatDate(b.expired_at) },
+              { key: 'expired_date', header: 'Tgl. Expired', render: (b) => formatDate(b.expired_date) },
               { key: 'current_stock', header: 'Stok Saat Ini', render: (b) => <span className="font-bold">{b.current_stock}</span> },
               { key: 'actions', header: 'Aksi', render: (b) => (
                 <Button size="sm" variant="outline" onClick={() => handleOpenEditBatch(b)}>
@@ -329,7 +329,7 @@ export const MedicineManagement: React.FC = () => {
       <Modal isOpen={showBatchForm} onClose={() => setShowBatchForm(false)} title={editingBatch ? 'Edit Stok Batch' : 'Tambah Batch Stok Baru'}>
         <div className="space-y-4">
           <Input label="Nomor Batch *" value={batchFormData.batch_number} onChange={(e) => setBatchFormData(p => ({ ...p, batch_number: e.target.value }))} placeholder="Contoh: B01" />
-          <Input label="Tanggal Expired *" type="date" value={batchFormData.expired_at} onChange={(e) => setBatchFormData(p => ({ ...p, expired_at: e.target.value }))} />
+          <Input label="Tanggal Expired *" type="date" value={batchFormData.expired_date} onChange={(e) => setBatchFormData(p => ({ ...p, expired_date: e.target.value }))} />
           <Input label="Jumlah Stok *" type="number" value={batchFormData.current_stock} onChange={(e) => setBatchFormData(p => ({ ...p, current_stock: parseInt(e.target.value) || 0 }))} />
 
           <div className="flex gap-3 pt-2">
