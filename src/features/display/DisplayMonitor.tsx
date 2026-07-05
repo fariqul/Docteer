@@ -58,12 +58,14 @@ export const DisplayMonitor: React.FC = () => {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'queues' },
         (payload: any) => {
+          console.log('Realtime queues update received:', payload)
           const newRec = payload.new as any
           const oldRec = payload.old as any
           if (
             (newRec && newRec.department === department) ||
             (oldRec && oldRec.department === department)
           ) {
+            console.log('Refetching queue data for department:', department)
             fetchQueueData()
           }
         }
@@ -71,18 +73,22 @@ export const DisplayMonitor: React.FC = () => {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'display_settings' },
-        () => {
+        (payload: any) => {
+          console.log('Realtime display_settings update received:', payload)
           fetchDisplaySettings()
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'running_texts' },
-        () => {
+        (payload: any) => {
+          console.log('Realtime running_texts update received:', payload)
           fetchDisplaySettings()
         }
       )
-      .subscribe()
+      .subscribe((status: any) => {
+        console.log('Realtime subscription status for display:', status)
+      })
 
     return () => {
       supabase.removeChannel(channel)
@@ -119,11 +125,17 @@ export const DisplayMonitor: React.FC = () => {
 
   const playVoiceCall = (queueNumber: string, patientName: string) => {
     if ('speechSynthesis' in window) {
+      console.log('Playing voice call for:', queueNumber, patientName)
+      // Cancel any ongoing or stuck speech synthesis jobs
+      speechSynthesis.cancel()
+
       const text = generateVoiceText(queueNumber, patientName, department)
       const utterance = new SpeechSynthesisUtterance(text)
       utterance.lang = 'id-ID'
       utterance.rate = 0.9
       speechSynthesis.speak(utterance)
+    } else {
+      console.warn('Speech synthesis not supported in this browser.')
     }
   }
 
