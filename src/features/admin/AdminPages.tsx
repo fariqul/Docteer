@@ -174,7 +174,7 @@ export const MedicineManagement: React.FC = () => {
     setBatchFormData({
       batch_number: batch.batch_number,
       expired_date: batch.expired_date,
-      current_stock: batch.current_stock
+      current_stock: batch.quantity ?? batch.current_stock ?? 0
     })
     setShowBatchForm(true)
   }
@@ -189,6 +189,7 @@ export const MedicineManagement: React.FC = () => {
           .update({
             batch_number: batchFormData.batch_number,
             expired_date: batchFormData.expired_date,
+            quantity: batchFormData.current_stock,
             current_stock: batchFormData.current_stock
           })
           .eq('id', editingBatch.id)
@@ -199,6 +200,7 @@ export const MedicineManagement: React.FC = () => {
             medicine_id: selectedMedicineForBatches.id,
             batch_number: batchFormData.batch_number,
             expired_date: batchFormData.expired_date,
+            quantity: batchFormData.current_stock,
             current_stock: batchFormData.current_stock
           })
       }
@@ -246,7 +248,7 @@ export const MedicineManagement: React.FC = () => {
             { key: 'name', header: 'Nama Obat', render: (m) => <span className="font-semibold">{m.name}</span> },
             { key: 'unit', header: 'Satuan' },
             { key: 'stock', header: 'Stok', render: (m) => {
-              const stock = (m as any).batches?.reduce((s: number, b: any) => s + b.current_stock, 0) ?? 0
+              const stock = (m as any).batches?.reduce((s: number, b: any) => s + (b.quantity ?? 0), 0) ?? 0
               return (
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{stock}</span>
@@ -305,7 +307,7 @@ export const MedicineManagement: React.FC = () => {
             columns={[
               { key: 'batch_number', header: 'No. Batch', render: (b) => <span className="font-semibold font-mono">{b.batch_number}</span> },
               { key: 'expired_date', header: 'Tgl. Expired', render: (b) => formatDate(b.expired_date) },
-              { key: 'current_stock', header: 'Stok Saat Ini', render: (b) => <span className="font-bold">{b.current_stock}</span> },
+              { key: 'quantity', header: 'Stok Saat Ini', render: (b) => <span className="font-bold">{b.quantity}</span> },
               { key: 'actions', header: 'Aksi', render: (b) => (
                 <Button size="sm" variant="outline" onClick={() => handleOpenEditBatch(b)}>
                   Edit Stok

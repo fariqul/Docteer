@@ -103,7 +103,7 @@ export const Pharmacy: React.FC = () => {
           .from('medicine_batches')
           .select('*')
           .eq('medicine_id', item.medicine_id)
-          .gt('current_stock', 0)
+          .gt('quantity', 0)
           .order('expired_date', { ascending: true })
 
         let remainingQty = item.quantity
@@ -112,13 +112,16 @@ export const Pharmacy: React.FC = () => {
           for (const batch of batches) {
             if (remainingQty <= 0) break
 
-            const deductQty = Math.min(batch.current_stock, remainingQty)
-            const newStock = batch.current_stock - deductQty
+            const deductQty = Math.min(batch.quantity, remainingQty)
+            const newStock = batch.quantity - deductQty
 
             // 2. Update the batch's current stock
             await supabase
               .from('medicine_batches')
-              .update({ current_stock: newStock })
+              .update({
+                quantity: newStock,
+                current_stock: newStock
+              })
               .eq('id', batch.id)
 
             // 3. Log the medicine transaction for this specific batch
