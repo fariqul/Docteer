@@ -182,8 +182,9 @@ export const MedicineManagement: React.FC = () => {
   const handleSaveBatch = async () => {
     if (!selectedMedicineForBatches) return
     try {
+      let res;
       if (editingBatch) {
-        await supabase
+        res = await supabase
           .from('medicine_batches')
           .update({
             batch_number: batchFormData.batch_number,
@@ -193,7 +194,7 @@ export const MedicineManagement: React.FC = () => {
           })
           .eq('id', editingBatch.id)
       } else {
-        await supabase
+        res = await supabase
           .from('medicine_batches')
           .insert({
             medicine_id: selectedMedicineForBatches.id,
@@ -203,23 +204,32 @@ export const MedicineManagement: React.FC = () => {
             current_stock: batchFormData.current_stock
           })
       }
+
+      if (res.error) {
+        throw new Error(res.error.message)
+      }
+
       setShowBatchForm(false)
       setEditingBatch(null)
       fetchBatches(selectedMedicineForBatches.id)
       fetchMedicines()
-    } catch (err) {
+    } catch (err: any) {
       console.error(err)
-      alert('Gagal menyimpan batch')
+      alert(`Gagal menyimpan batch: ${err.message || err}`)
     }
   }
 
   const handleSubmit = async () => {
     try {
-      await supabase.from('medicines').insert({ ...formData, is_active: true })
+      const { error } = await supabase.from('medicines').insert({ ...formData, is_active: true })
+      if (error) throw error
       setShowForm(false)
       setFormData({ name: '', unit: 'tablet', price: 0, minimum_stock: 10 })
       fetchMedicines()
-    } catch (err) { console.error(err) }
+    } catch (err: any) {
+      console.error(err)
+      alert(`Gagal menambah obat: ${err.message || err}`)
+    }
   }
 
   return (
