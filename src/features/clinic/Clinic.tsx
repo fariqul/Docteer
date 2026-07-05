@@ -231,31 +231,26 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
               duration: item.duration,
             })
           }
-
-          // Create pharmacy queue
-          let queueNumber = 'F001'
-          try {
-            const { data: qn } = await supabase.rpc('generate_queue_number', { p_prefix: 'F' })
-            if (qn) queueNumber = qn
-          } catch { /* use default */ }
-
-          await supabase.from('queues').insert({
-            visit_id: selectedQueue.visit_id,
-            patient_id: selectedQueue.patient_id,
-            department: 'pharmacy',
-            queue_number: queueNumber,
-            status: 'waiting',
-          })
-
-          await supabase.from('queue_histories').insert({
-            visit_id: selectedQueue.visit_id,
-            from_department: department,
-            to_department: 'pharmacy',
-            queue_number: queueNumber,
-            transferred_by: currentStaff?.id,
-          })
         }
       }
+
+      // ALWAYS Create pharmacy queue (even if no prescription is given)
+      // Use original queue number so that patients keep their number!
+      await supabase.from('queues').insert({
+        visit_id: selectedQueue.visit_id,
+        patient_id: selectedQueue.patient_id,
+        department: 'pharmacy',
+        queue_number: selectedQueue.queue_number,
+        status: 'waiting',
+      })
+
+      await supabase.from('queue_histories').insert({
+        visit_id: selectedQueue.visit_id,
+        from_department: department,
+        to_department: 'pharmacy',
+        queue_number: selectedQueue.queue_number,
+        transferred_by: currentStaff?.id,
+      })
 
       // Refer to lab (non-linear flow / new instruction to lab with new queue number)
       if (referToLab) {
