@@ -189,8 +189,7 @@ export const MedicineManagement: React.FC = () => {
           .update({
             batch_number: batchFormData.batch_number,
             expired_date: batchFormData.expired_date,
-            current_stock: batchFormData.current_stock,
-            initial_stock: batchFormData.current_stock
+            current_stock: batchFormData.current_stock
           })
           .eq('id', editingBatch.id)
       } else {
@@ -200,7 +199,6 @@ export const MedicineManagement: React.FC = () => {
             medicine_id: selectedMedicineForBatches.id,
             batch_number: batchFormData.batch_number,
             expired_date: batchFormData.expired_date,
-            initial_stock: batchFormData.current_stock,
             current_stock: batchFormData.current_stock
           })
       }
