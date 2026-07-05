@@ -1,0 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply font-sans bg-surface-50 text-surface-800 min-h-screen;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-300 rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-surface-400;
+  }
+}
+
+@layer components {
+  /* Connection Banner */
+  .connection-banner {
+    @apply fixed top-0 left-0 right-0 z-[100] py-2 px-4 text-center text-sm font-medium transition-all duration-300;
+  }
+  .connection-banner.online {
+    @apply bg-accent-100 text-accent-800;
+  }
+  .connection-banner.offline {
+    @apply bg-red-100 text-red-800;
+  }
+
+  /* Thermal Receipt Print */
+  @media print {
+    .no-print {
+      display: none !important;
+    }
+    .print-receipt {
+      width: 58mm !important;
+      margin: 0 !important;
+      padding: 2mm !important;
+      font-size: 10px !important;
+      font-family: 'Courier New', monospace !important;
+    }
+    .print-receipt * {
+      font-size: inherit !important;
+    }
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
