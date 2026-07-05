@@ -119,6 +119,14 @@ export const MedicineManagement: React.FC = () => {
   const [showForm, setShowForm] = useState(false)
   const [formData, setFormData] = useState({ name: '', unit: 'tablet', price: 0, minimum_stock: 10 })
 
+  // Batch states
+  const [selectedMedicineForBatches, setSelectedMedicineForBatches] = useState<any | null>(null)
+  const [batchesList, setBatchesList] = useState<any[]>([])
+  const [showBatchesModal, setShowBatchesModal] = useState(false)
+  const [showBatchForm, setShowBatchForm] = useState(false)
+  const [editingBatch, setEditingBatch] = useState<any | null>(null)
+  const [batchFormData, setBatchFormData] = useState({ batch_number: '', expired_at: '', current_stock: 0 })
+
   useEffect(() => { fetchMedicines() }, [])
 
   const fetchMedicines = async () => {
@@ -134,6 +142,75 @@ export const MedicineManagement: React.FC = () => {
         { id: '4', name: 'Vitamin C 500mg', unit: 'tablet', price: 300, minimum_stock: 10, is_active: true, created_at: '', total_stock: 0 },
       ] as Medicine[])
     } finally { setIsLoading(false) }
+  }
+
+  const fetchBatches = async (medicineId: string) => {
+    try {
+      const { data } = await supabase
+        .from('medicine_batches')
+        .select('*')
+        .eq('medicine_id', medicineId)
+        .order('expired_at', { ascending: true })
+      setBatchesList(data || [])
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const handleManageStok = (medicine: any) => {
+    setSelectedMedicineForBatches(medicine)
+    fetchBatches(medicine.id)
+    setShowBatchesModal(true)
+  }
+
+  const handleOpenAddBatch = () => {
+    setEditingBatch(null)
+    setBatchFormData({ batch_number: '', expired_at: new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0], current_stock: 100 })
+    setShowBatchForm(true)
+  }
+
+  const handleOpenEditBatch = (batch: any) => {
+    setEditingBatch(batch)
+    setBatchFormData({
+      batch_number: batch.batch_number,
+      expired_at: batch.expired_at,
+      current_stock: batch.current_stock
+    })
+    setShowBatchForm(true)
+  }
+
+  const handleSaveBatch = async () => {
+    if (!selectedMedicineForBatches) return
+    try {
+      if (editingBatch) {
+        await supabase
+          .from('medicine_batches')
+          .update({
+            batch_number: batchFormData.batch_number,
+            expired_at: batchFormData.expired_at,
+            current_stock: batchFormData.current_stock,
+            initial_stock: batchFormData.current_stock
+          })
+          .eq('id', editingBatch.id)
+      } else {
+        await supabase
+          .from('medicine_batches')
+          .insert({
+            medicine_id: selectedMedicineForBatches.id,
+            batch_number: batchFormData.batch_number,
+            expired_at: batchFormData.expired_at,
+            initial_stock: batchFormData.current_stock,
+            current_stock: batchFormData.current_stock
+          })
+      }
+      setShowBatchForm(false)
+      setEditingBatch(null)
+      fetchBatches(selectedMedicineForBatches.id)
+      fetchMedicines()
+    } catch (err) {
+      console.error(err)
+      alert('Gagal menyimpan batch')
+    }
   }
 
   const handleSubmit = async () => {
@@ -161,7 +238,7 @@ export const MedicineManagement: React.FC = () => {
             { key: 'name', header: 'Nama Obat', render: (m) => <span className="font-semibold">{m.name}</span> },
             { key: 'unit', header: 'Satuan' },
             { key: 'stock', header: 'Stok', render: (m) => {
-              const stock = (m as any).total_stock ?? ((m as any).batches?.reduce((s: number, b: any) => s + b.current_stock, 0) ?? 0)
+              const stock = (m as any).batches?.reduce((s: number, b: any) => s + b.current_stock, 0) ?? 0
               return (
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{stock}</span>
@@ -172,6 +249,13 @@ export const MedicineManagement: React.FC = () => {
             }},
             { key: 'minimum_stock', header: 'Min. Stok' },
             { key: 'price', header: 'Harga', render: (m) => `Rp ${m.price.toLocaleString()}` },
+            { key: 'actions', header: 'Aksi', render: (m) => (
+              <div className="flex gap-2">
+                <Button size="sm" variant="primary" onClick={() => handleManageStok(m)}>
+                  Kelola Stok
+                </Button>
+              </div>
+            )},
           ]}
           data={medicines}
           keyExtractor={(m) => m.id}
@@ -179,6 +263,7 @@ export const MedicineManagement: React.FC = () => {
         />
       </Card>
 
+      {/* Main Medicine Add Modal */}
       <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Tambah Obat">
         <div className="space-y-4">
           <Input label="Nama Obat *" value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
@@ -194,6 +279,52 @@ export const MedicineManagement: React.FC = () => {
           <div className="flex gap-3 pt-2">
             <Button variant="primary" className="flex-1" onClick={handleSubmit}>Simpan</Button>
             <Button variant="secondary" onClick={() => setShowForm(false)}>Batal</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Batches Management Modal */}
+      <Modal isOpen={showBatchesModal} onClose={() => setShowBatchesModal(false)} title={`Kelola Stok & Batch — ${selectedMedicineForBatches?.name}`} size="lg">
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-surface-500">Stok obat diatur per batch expired date untuk mendukung FEFO</p>
+            <Button size="sm" variant="primary" leftIcon={<Plus size={14} />} onClick={handleOpenAddBatch}>
+              Tambah Batch Baru
+            </Button>
+          </div>
+
+          <DataTable
+            columns={[
+              { key: 'batch_number', header: 'No. Batch', render: (b) => <span className="font-semibold font-mono">{b.batch_number}</span> },
+              { key: 'expired_at', header: 'Tgl. Expired', render: (b) => formatDate(b.expired_at) },
+              { key: 'current_stock', header: 'Stok Saat Ini', render: (b) => <span className="font-bold">{b.current_stock}</span> },
+              { key: 'actions', header: 'Aksi', render: (b) => (
+                <Button size="sm" variant="outline" onClick={() => handleOpenEditBatch(b)}>
+                  Edit Stok
+                </Button>
+              )}
+            ]}
+            data={batchesList}
+            keyExtractor={(b) => b.id}
+            emptyMessage="Belum ada batch stok untuk obat ini"
+          />
+
+          <div className="flex justify-end pt-2">
+            <Button variant="secondary" onClick={() => setShowBatchesModal(false)}>Tutup</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add/Edit Batch Form Modal */}
+      <Modal isOpen={showBatchForm} onClose={() => setShowBatchForm(false)} title={editingBatch ? 'Edit Stok Batch' : 'Tambah Batch Stok Baru'}>
+        <div className="space-y-4">
+          <Input label="Nomor Batch *" value={batchFormData.batch_number} onChange={(e) => setBatchFormData(p => ({ ...p, batch_number: e.target.value }))} placeholder="Contoh: B01" />
+          <Input label="Tanggal Expired *" type="date" value={batchFormData.expired_at} onChange={(e) => setBatchFormData(p => ({ ...p, expired_at: e.target.value }))} />
+          <Input label="Jumlah Stok *" type="number" value={batchFormData.current_stock} onChange={(e) => setBatchFormData(p => ({ ...p, current_stock: parseInt(e.target.value) || 0 }))} />
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="primary" className="flex-1" onClick={handleSaveBatch}>Simpan</Button>
+            <Button variant="secondary" onClick={() => setShowBatchForm(false)}>Batal</Button>
           </div>
         </div>
       </Modal>
