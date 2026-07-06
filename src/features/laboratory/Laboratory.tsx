@@ -28,11 +28,8 @@ export const Laboratory: React.FC = () => {
   const [labResults, setLabResults] = useState<Record<string, { result: string; notes: string }>>({})
   const [instructedLabTests, setInstructedLabTests] = useState<string[]>([])
   const [existingLabRows, setExistingLabRows] = useState<any[]>([])
-  const [stripStocks, setStripStocks] = useState<Record<string, number>>({
-    gula_darah: 0,
-    kolesterol: 0,
-    asam_urat: 0,
-  })
+  const [alkesStocks, setAlkesStocks] = useState<any[]>([])
+
 
   useEffect(() => {
     fetchQueue()
@@ -41,26 +38,52 @@ export const Laboratory: React.FC = () => {
 
   const fetchStripStocks = async () => {
     try {
+      // First ensure categories exist and migrate any uncategorized
+      const { data: cats } = await supabase.from('medicine_categories').select('*')
+      let alkesCat = cats?.find((c: any) => c.name === 'Alkes')
+      let obatCat = cats?.find((c: any) => c.name === 'Obat')
+
+      if (!alkesCat || !obatCat) {
+        if (!obatCat) {
+          const { data: newObat } = await supabase.from('medicine_categories').insert({ name: 'Obat', description: 'Kategori Obat' }).select().single()
+          obatCat = newObat
+        }
+        if (!alkesCat) {
+          const { data: newAlkes } = await supabase.from('medicine_categories').insert({ name: 'Alkes', description: 'Alat Kesehatan / Lab' }).select().single()
+          alkesCat = newAlkes
+        }
+      }
+
+      // Check for uncategorized medicines/alkes
+      const { data: uncategorized } = await supabase.from('medicines').select('*').is('category_id', null)
+      if (uncategorized && uncategorized.length > 0) {
+        for (const m of uncategorized) {
+          const name = m.name.toLowerCase()
+          const unit = m.unit?.toLowerCase() || ''
+          const isAlkes = name.includes('strip') || name.includes('alkes') || unit.includes('pcs') || unit.includes('strip')
+          await supabase
+            .from('medicines')
+            .update({ category_id: isAlkes ? alkesCat.id : obatCat.id })
+            .eq('id', m.id)
+        }
+      }
+
       const { data } = await supabase
         .from('medicines')
-        .select('*, batches:medicine_batches(*)')
+        .select('*, category:medicine_categories(*), batches:medicine_batches(*)')
         .eq('is_active', true)
-        .or('name.ilike.%strip gula darah%,name.ilike.%strip kolesterol%,name.ilike.%strip asam urat%')
 
       if (data) {
-        const stocks = { gula_darah: 0, kolesterol: 0, asam_urat: 0 }
-        data.forEach((m: any) => {
-          const totalStock = m.batches?.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0) || 0
-          const name = m.name.toLowerCase()
-          if (name.includes('gula darah') || name.includes('sugar')) {
-            stocks.gula_darah = totalStock
-          } else if (name.includes('kolesterol') || name.includes('cholesterol')) {
-            stocks.kolesterol = totalStock
-          } else if (name.includes('asam urat') || name.includes('uric')) {
-            stocks.asam_urat = totalStock
-          }
+        // Filter those under 'Alkes' category
+        const alkesItems = data.filter((m: any) => m.category?.name === 'Alkes')
+        
+        // Sum stock for each alkes
+        const alkesWithStock = alkesItems.map((m: any) => {
+          const totalStock = m.batches?.reduce((acc: number, b: any) => acc + (b.current_stock || 0), 0) || 0
+          return { ...m, total_stock: totalStock }
         })
-        setStripStocks(stocks)
+        
+        setAlkesStocks(alkesWithStock)
       }
     } catch (err) {
       console.error('Error fetching strip stocks:', err)
@@ -69,35 +92,37 @@ export const Laboratory: React.FC = () => {
 
   const deductStripStock = async (testType: string) => {
     try {
-      let searchPattern = ''
-      if (testType === 'gula_darah') searchPattern = 'strip gula darah'
-      else if (testType === 'kolesterol') searchPattern = 'strip kolesterol'
-      else if (testType === 'asam_urat') searchPattern = 'strip asam urat'
+      let keyword = ''
+      if (testType === 'gula_darah') keyword = 'gula darah'
+      else if (testType === 'kolesterol') keyword = 'kolesterol'
+      else if (testType === 'asam_urat') keyword = 'asam urat'
       else return
 
       const { data: meds } = await supabase
         .from('medicines')
-        .select('id')
-        .ilike('name', `%${searchPattern}%`)
+        .select('*, category:medicine_categories(*)')
+        .ilike('name', `%${keyword}%`)
         .eq('is_active', true)
-        .limit(1)
 
       if (meds && meds.length > 0) {
-        const medicineId = meds[0].id
+        // Filter those under 'Alkes' category
+        const alkesMeds = meds.filter((m: any) => m.category?.name === 'Alkes')
+        const bestMed = alkesMeds.length > 0 ? alkesMeds[0] : meds[0]
+
+        const medicineId = bestMed.id
         const { data: batches } = await supabase
           .from('medicine_batches')
           .select('*')
           .eq('medicine_id', medicineId)
-          .gt('quantity', 0)
+          .gt('current_stock', 0)
           .order('expired_date', { ascending: true })
 
         if (batches && batches.length > 0) {
           const batch = batches[0]
-          const newQty = Math.max(0, batch.quantity - 1)
+          const newQty = Math.max(0, batch.current_stock - 1)
           await supabase
             .from('medicine_batches')
             .update({
-              quantity: newQty,
               current_stock: newQty,
             })
             .eq('id', batch.id)
@@ -241,65 +266,94 @@ export const Laboratory: React.FC = () => {
       title="Laboratorium"
       subtitle={`Petugas: ${currentStaff?.name || '-'}`}
     >
-      {/* Strip Stocks Stats Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        {[
-          { key: 'gula_darah', label: 'Stok Strip Gula Darah', color: 'text-sky-600', bg: 'bg-sky-50/50 border-sky-100' },
-          { key: 'kolesterol', label: 'Stok Strip Kolesterol', color: 'text-emerald-600', bg: 'bg-emerald-50/50 border-emerald-100' },
-          { key: 'asam_urat', label: 'Stok Strip Asam Urat', color: 'text-violet-600', bg: 'bg-violet-50/50 border-violet-100' },
-        ].map((item) => {
-          const stock = stripStocks[item.key] || 0
-          return (
-            <div key={item.key} className={`border rounded-2xl p-4 flex items-center justify-between bg-white shadow-sm ${item.bg}`}>
-              <div>
-                <p className="text-xs text-surface-500 font-bold uppercase tracking-wider">{item.label}</p>
-                <p className={`text-2xl font-black mt-1 ${item.color}`}>{stock} <span className="text-xs font-semibold text-surface-400">pcs</span></p>
-              </div>
-              <FlaskConical className={`w-8 h-8 opacity-45 ${item.color}`} />
-            </div>
-          )
-        })}
-      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Antrean Lab (2/3 width on desktop) */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader
+              title="Antrean Lab"
+              action={
+                <Badge variant="purple" dot pulse={queueList.length > 0}>
+                  {queueList.filter((q) => q.status === 'waiting').length} Menunggu
+                </Badge>
+              }
+            />
+            <DataTable
+              columns={[
+                {
+                  key: 'queue_number', header: 'No. Antrean', render: (q) => (
+                    <span className="font-bold text-lg text-purple-700">{q.queue_number}</span>
+                  ),
+                },
+                { key: 'name', header: 'Nama', render: (q) => q.patient?.name || '-' },
+                { key: 'status', header: 'Status', render: (q) => (
+                  <Badge variant={q.status === 'waiting' ? 'warning' : 'primary'}>
+                    {getStatusLabel(q.status)}
+                  </Badge>
+                )},
+                { key: 'time', header: 'Waktu', render: (q) => formatTime(q.created_at) },
+                {
+                  key: 'actions', header: 'Aksi', render: (q) => (
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="primary" onClick={() => handleStartExam(q)} leftIcon={<FlaskConical size={14} />}>
+                        Input Hasil
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+              data={queueList}
+              keyExtractor={(q) => q.id}
+              isLoading={isLoading}
+              emptyMessage="Tidak ada pasien menunggu lab"
+            />
+          </Card>
+        </div>
 
-      <Card>
-        <CardHeader
-          title="Antrean Lab"
-          action={
-            <Badge variant="purple" dot pulse={queueList.length > 0}>
-              {queueList.filter((q) => q.status === 'waiting').length} Menunggu
-            </Badge>
-          }
-        />
-        <DataTable
-          columns={[
-            {
-              key: 'queue_number', header: 'No. Antrean', render: (q) => (
-                <span className="font-bold text-lg text-purple-700">{q.queue_number}</span>
-              ),
-            },
-            { key: 'name', header: 'Nama', render: (q) => q.patient?.name || '-' },
-            { key: 'status', header: 'Status', render: (q) => (
-              <Badge variant={q.status === 'waiting' ? 'warning' : 'primary'}>
-                {getStatusLabel(q.status)}
-              </Badge>
-            )},
-            { key: 'time', header: 'Waktu', render: (q) => formatTime(q.created_at) },
-            {
-              key: 'actions', header: 'Aksi', render: (q) => (
-                <div className="flex gap-2">
-                  <Button size="sm" variant="primary" onClick={() => handleStartExam(q)} leftIcon={<FlaskConical size={14} />}>
-                    Input Hasil
-                  </Button>
+        {/* Right Column: Realtime Stok Alkes Lab (1/3 width on desktop) */}
+        <div className="lg:col-span-1">
+          <Card className="h-full flex flex-col">
+            <CardHeader
+              title="Stok Alkes Lab"
+              action={
+                <Badge variant="purple">
+                  {alkesStocks.length} Item
+                </Badge>
+              }
+            />
+            <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[70vh] min-h-[300px]">
+              {alkesStocks.length === 0 ? (
+                <div className="text-center py-8 text-surface-450 italic">
+                  <p className="text-sm font-medium">Belum ada alkes terdaftar</p>
+                  <p className="text-xs text-surface-400 mt-1">Silakan tambah alkes di menu Kelola Obat/Alkes Admin</p>
                 </div>
-              ),
-            },
-          ]}
-          data={queueList}
-          keyExtractor={(q) => q.id}
-          isLoading={isLoading}
-          emptyMessage="Tidak ada pasien menunggu lab"
-        />
-      </Card>
+              ) : (
+                alkesStocks.map((alkes) => {
+                  const isOut = alkes.total_stock === 0
+                  const isLow = alkes.total_stock <= alkes.minimum_stock
+                  return (
+                    <div key={alkes.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-surface-100 shadow-sm hover:border-purple-200 transition-colors">
+                      <div className="min-w-0 pr-2">
+                        <p className="font-semibold text-surface-800 text-sm truncate">{alkes.name}</p>
+                        <p className="text-[10px] text-surface-400 font-semibold mt-0.5">{alkes.unit}</p>
+                      </div>
+                      <span className={`text-xs font-black px-2.5 py-1 rounded-full flex-shrink-0 ${
+                        isOut ? 'bg-red-100 text-red-700' :
+                        isLow ? 'bg-orange-100 text-orange-700' :
+                        'bg-purple-100 text-purple-700'
+                      }`}>
+                        {alkes.total_stock} <span className="text-[10px] font-semibold">{alkes.unit}</span>
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </Card>
+        </div>
+
+      </div>
 
       {/* Lab Results Modal */}
       <Modal isOpen={showLabForm} onClose={() => setShowLabForm(false)} title={`Hasil Lab - ${selectedQueue?.patient?.name}`} size="lg">

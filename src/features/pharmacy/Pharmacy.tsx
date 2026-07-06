@@ -6,18 +6,22 @@ import {
 } from 'lucide-react'
 import { PageLayout } from '../../components/layout'
 import { Button, Card, CardHeader, Badge } from '../../components/ui'
-import { useAuthStore } from '../../stores'
+import { useAuthStore, useToastStore } from '../../stores'
 import { supabase } from '../../lib/supabase'
 import { formatTime, getStatusLabel } from '../../lib/utils'
 
 export const Pharmacy: React.FC = () => {
   const currentStaff = useAuthStore(s => s.staffByDepartment['pharmacy'])
   const [queues, setQueues] = useState<any[]>([])
+  const [medicines, setMedicines] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isMedsLoading, setIsMedsLoading] = useState(true)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     fetchPharmacyQueues()
+    fetchMedicines()
   }, [])
 
   const fetchPharmacyQueues = async () => {
@@ -34,7 +38,10 @@ export const Pharmacy: React.FC = () => {
               *,
               items:prescription_items(
                 *,
-                medicine:medicines(*)
+                medicine:medicines(
+                  *,
+                  batches:medicine_batches(*)
+                )
               )
             )
           )
@@ -51,6 +58,28 @@ export const Pharmacy: React.FC = () => {
       setQueues([])
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const fetchMedicines = async () => {
+    setIsMedsLoading(true)
+    try {
+      const { data } = await supabase
+        .from('medicines')
+        .select('*, batches:medicine_batches(*)')
+        .eq('is_active', true)
+        .order('name')
+      
+      const medsWithStock = data?.map((m: any) => {
+        const totalStock = m.batches?.reduce((acc: number, b: any) => acc + (b.current_stock || 0), 0) || 0
+        return { ...m, total_stock: totalStock }
+      }) || []
+      
+      setMedicines(medsWithStock)
+    } catch (err) {
+      console.error('Fetch medicines stock error:', err)
+    } finally {
+      setIsMedsLoading(false)
     }
   }
 
@@ -136,10 +165,12 @@ export const Pharmacy: React.FC = () => {
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', queue.visit_id)
 
-      alert('Kunjungan selesai dan pelayanan obat diproses!')
+      useToastStore.getState().showToast('Kunjungan selesai dan pelayanan obat diproses!', 'success')
       fetchPharmacyQueues()
-    } catch (err) {
+      fetchMedicines()
+    } catch (err: any) {
       console.error('Dispense error:', err)
+      useToastStore.getState().showToast(`Gagal memproses obat: ${err.message || err}`, 'error')
     } finally {
       setIsProcessing(false)
     }
@@ -203,95 +234,174 @@ export const Pharmacy: React.FC = () => {
     }
   }
 
+  const filteredMeds = searchQuery
+    ? medicines.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : medicines
+
   return (
     <PageLayout title="Farmasi" subtitle={`Petugas: ${currentStaff?.name || '-'}`}>
-      <Card>
-        <CardHeader
-          title="Antrean Farmasi & Apotek"
-          action={
-            <Badge variant="danger" dot pulse={queues.filter((q) => q.status === 'waiting').length > 0}>
-              {queues.filter((q) => q.status === 'waiting').length} Pending
-            </Badge>
-          }
-        />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Queues (2/3 width on desktop) */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader
+              title="Antrean Farmasi & Apotek"
+              action={
+                <Badge variant="danger" dot pulse={queues.filter((q) => q.status === 'waiting').length > 0}>
+                  {queues.filter((q) => q.status === 'waiting').length} Pending
+                </Badge>
+              }
+            />
 
-        {isLoading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-surface-50 rounded-xl p-4 animate-pulse">
-                <div className="h-5 bg-surface-200 rounded w-1/3 mb-3" />
-                <div className="h-4 bg-surface-100 rounded w-2/3" />
-              </div>
-            ))}
-          </div>
-        ) : queues.length === 0 ? (
-          <div className="text-center py-12 text-surface-400">
-            <Package size={48} className="mx-auto mb-4 opacity-30" />
-            <p className="text-body-lg">Belum ada antrean masuk</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {queues.map((queue) => {
-              const patientName = queue.patient?.name || 'Pasien'
-              const rx = queue.visit?.prescriptions?.[0]
-              const items = rx?.items || []
-
-              return (
-                <div key={queue.id} className="bg-surface-50 rounded-xl p-5 border border-surface-200 hover:border-primary-200 transition-all">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <span className="font-bold text-lg text-primary-700">{queue.queue_number}</span>
-                      <div>
-                        <p className="font-semibold text-surface-800">{patientName}</p>
-                        <p className="text-sm text-surface-500">{formatTime(queue.created_at)}</p>
-                      </div>
-                    </div>
-                    <Badge variant={queue.status === 'waiting' ? 'warning' : queue.status === 'ready' ? 'accent' : 'primary'}>
-                      {getStatusLabel(queue.status)}
-                    </Badge>
+            {isLoading ? (
+              <div className="space-y-4">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="bg-surface-50 rounded-xl p-4 animate-pulse">
+                    <div className="h-5 bg-surface-200 rounded w-1/3 mb-3" />
+                    <div className="h-4 bg-surface-100 rounded w-2/3" />
                   </div>
+                ))}
+              </div>
+            ) : queues.length === 0 ? (
+              <div className="text-center py-12 text-surface-400">
+                <Package size={48} className="mx-auto mb-4 opacity-30" />
+                <p className="text-body-lg">Belum ada antrean masuk</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {queues.map((queue) => {
+                  const patientName = queue.patient?.name || 'Pasien'
+                  const rx = queue.visit?.prescriptions?.[0]
+                  const items = rx?.items || []
 
-                  {/* Medicine list */}
-                  <div className="space-y-2 mb-4">
-                    {items.length === 0 ? (
-                      <div className="bg-white rounded-lg p-4 text-center border border-dashed border-surface-300">
-                        <p className="text-sm text-surface-500 font-medium italic">Tidak Ada Resep (Hanya Konsultasi / Rujukan Selesai)</p>
-                      </div>
-                    ) : (
-                      items.map((item: any) => (
-                        <div key={item.id} className="flex items-center justify-between bg-white rounded-lg p-3">
+                  return (
+                    <div key={queue.id} className="bg-surface-50 rounded-xl p-5 border border-surface-200 hover:border-primary-200 transition-all shadow-sm">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-lg text-primary-700">{queue.queue_number}</span>
                           <div>
-                            <p className="font-medium text-surface-800">{item.medicine?.name}</p>
-                            <p className="text-sm text-surface-500">
-                              {item.dosage} {item.notes ? `(${item.notes})` : ''}
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold">{item.quantity}</p>
-                            <p className="text-xs text-surface-400">{item.medicine?.unit}</p>
+                            <p className="font-semibold text-surface-800">{patientName}</p>
+                            <p className="text-sm text-surface-500">{formatTime(queue.created_at)}</p>
                           </div>
                         </div>
-                      ))
-                    )}
-                  </div>
+                        <Badge variant={queue.status === 'waiting' ? 'warning' : queue.status === 'ready' ? 'accent' : 'primary'}>
+                          {getStatusLabel(queue.status)}
+                        </Badge>
+                      </div>
 
-                  {/* Actions */}
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="accent" onClick={() => handleDispense(queue)} isLoading={isProcessing} leftIcon={<CheckCircle2 size={14} />}>
-                      {items.length === 0 ? 'Selesaikan Antrean' : 'Serahkan Obat'}
-                    </Button>
-                    {items.length > 0 && (
-                      <Button size="sm" variant="secondary" onClick={() => handlePrintReceipt(queue)} leftIcon={<Printer size={14} />}>
-                        Cetak Struk
-                      </Button>
-                    )}
-                  </div>
+                      {/* Medicine list */}
+                      <div className="space-y-2 mb-4">
+                        {items.length === 0 ? (
+                          <div className="bg-white rounded-lg p-4 text-center border border-dashed border-surface-300">
+                            <p className="text-sm text-surface-500 font-medium italic">Tidak Ada Resep (Hanya Konsultasi / Rujukan Selesai)</p>
+                          </div>
+                        ) : (
+                          items.map((item: any) => {
+                            const totalStock = item.medicine?.batches?.reduce((acc: number, b: any) => acc + (b.current_stock || 0), 0) || 0
+                            const isStockInsufficient = totalStock < item.quantity
+
+                            return (
+                              <div key={item.id} className="flex items-center justify-between bg-white rounded-lg p-3 border border-surface-100 shadow-sm">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <p className="font-semibold text-surface-800 text-sm">{item.medicine?.name}</p>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                      isStockInsufficient
+                                        ? 'bg-red-105 text-red-700 animate-pulse'
+                                        : 'bg-primary-50 text-primary-600'
+                                    }`}>
+                                      Stok: {totalStock} {item.medicine?.unit}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-surface-500 mt-0.5">
+                                    {item.dosage} {item.notes ? `(${item.notes})` : ''}
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-surface-800 text-sm">{item.quantity}</p>
+                                  <p className="text-[10px] text-surface-400 font-semibold">{item.medicine?.unit}</p>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="accent" onClick={() => handleDispense(queue)} isLoading={isProcessing} leftIcon={<CheckCircle2 size={14} />}>
+                          {items.length === 0 ? 'Selesaikan Antrean' : 'Serahkan Obat'}
+                        </Button>
+                        {items.length > 0 && (
+                          <Button size="sm" variant="secondary" onClick={() => handlePrintReceipt(queue)} leftIcon={<Printer size={14} />}>
+                            Cetak Struk
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Right Column: Realtime Stock (1/3 width on desktop) */}
+        <div className="lg:col-span-1">
+          <Card className="h-full flex flex-col">
+            <CardHeader
+              title="Stok Obat / Alkes"
+              action={
+                <Badge variant="primary">
+                  {medicines.length} Item
+                </Badge>
+              }
+            />
+            <div className="p-4 border-b border-surface-200 bg-surface-50/50">
+              <input
+                type="text"
+                placeholder="Cari obat/alkes..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full rounded-xl border border-surface-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 shadow-inner bg-white"
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[70vh] min-h-[300px]">
+              {isMedsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="h-12 bg-surface-100 rounded-xl animate-pulse" />
+                  ))}
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </Card>
+              ) : filteredMeds.length === 0 ? (
+                <p className="text-sm text-surface-400 text-center py-4 italic">Obat tidak ditemukan</p>
+              ) : (
+                filteredMeds.map((med) => {
+                  const isLow = med.total_stock <= med.minimum_stock
+                  const isOut = med.total_stock === 0
+                  return (
+                    <div key={med.id} className="flex justify-between items-center bg-white p-3 rounded-xl border border-surface-100 shadow-sm hover:border-primary-100 transition-colors">
+                      <div className="min-w-0 pr-2">
+                        <p className="font-semibold text-surface-800 text-sm truncate">{med.name}</p>
+                        <p className="text-[10px] text-surface-400 font-medium mt-0.5">{med.unit}</p>
+                      </div>
+                      <span className={`text-xs font-black px-2.5 py-1 rounded-full flex-shrink-0 ${
+                        isOut ? 'bg-red-100 text-red-700' :
+                        isLow ? 'bg-orange-100 text-orange-700' :
+                        'bg-sky-100 text-sky-700'
+                      }`}>
+                        {med.total_stock} <span className="text-[10px] font-semibold">{med.unit}</span>
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </Card>
+        </div>
+
+      </div>
     </PageLayout>
   )
 }

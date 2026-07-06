@@ -6,6 +6,7 @@ import { ErrorBoundary } from '../components/common/ErrorBoundary'
 import { useAuthStore, useUIStore } from '../stores'
 import { StaffSelector } from '../components/common/StaffSelector'
 import { cn } from '../lib/utils'
+import { ToastContainer } from '../components/common/ToastContainer'
 
 // Lazy load feature modules
 const Dashboard = lazy(() => import('../features/dashboard/Dashboard').then(m => ({ default: m.Dashboard })))
@@ -66,6 +67,7 @@ const StaffProtectedRoute = ({ children, department }: { children: React.ReactNo
 const MainLayout = () => (
   <div className="min-h-screen bg-surface-50">
     <ConnectionBanner />
+    <ToastContainer />
     <Sidebar />
     <ErrorBoundary>
       <Suspense fallback={<PageLoader />}>
@@ -78,6 +80,7 @@ const MainLayout = () => (
 // Display layout (no sidebar)
 const DisplayLayout = () => (
   <ErrorBoundary>
+    <ToastContainer />
     <Suspense fallback={<PageLoader />}>
       <Outlet />
     </Suspense>

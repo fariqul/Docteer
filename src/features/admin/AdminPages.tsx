@@ -15,6 +15,7 @@ import {
 import { PageLayout } from '../../components/layout'
 import { Button, Input, Card, CardHeader, Badge, DataTable, Modal, Select, Textarea } from '../../components/ui'
 import { supabase } from '../../lib/supabase'
+import { useToastStore } from '../../stores'
 import { formatDate, formatTime, getDepartmentLabel } from '../../lib/utils'
 import type { Staff, Medicine, ActivityLog } from '../../types/database'
 
@@ -117,7 +118,10 @@ export const MedicineManagement: React.FC = () => {
   const [medicines, setMedicines] = useState<Medicine[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [formData, setFormData] = useState({ name: '', unit: 'tablet', price: 0, minimum_stock: 10 })
+  const [editingMedicine, setEditingMedicine] = useState<any | null>(null)
+  const [categories, setCategories] = useState<{ obatId: string | null; alkesId: string | null }>({ obatId: null, alkesId: null })
+  const [activeTab, setActiveTab] = useState<'obat' | 'alkes'>('obat')
+  const [formData, setFormData] = useState({ name: '', unit: 'tablet', price: 0, minimum_stock: 10, category_id: '' })
 
   // Batch states
   const [selectedMedicineForBatches, setSelectedMedicineForBatches] = useState<any | null>(null)
@@ -127,12 +131,76 @@ export const MedicineManagement: React.FC = () => {
   const [editingBatch, setEditingBatch] = useState<any | null>(null)
   const [batchFormData, setBatchFormData] = useState({ batch_number: '', expired_date: '', current_stock: 0 })
 
-  useEffect(() => { fetchMedicines() }, [])
+  useEffect(() => {
+    const initData = async () => {
+      const cats = await ensureCategoriesExist()
+      setCategories(cats)
+      // Set default category_id to obatId
+      if (cats.obatId) {
+        setFormData(p => ({ ...p, category_id: cats.obatId! }))
+      }
+      fetchMedicines()
+    }
+    initData()
+  }, [])
+
+  const ensureCategoriesExist = async () => {
+    try {
+      const { data } = await supabase.from('medicine_categories').select('*')
+      let obatCat = data?.find((c: any) => c.name === 'Obat')
+      let alkesCat = data?.find((c: any) => c.name === 'Alkes')
+
+      if (!obatCat) {
+        const { data: newObat } = await supabase
+          .from('medicine_categories')
+          .insert({ name: 'Obat', description: 'Kategori Obat' })
+          .select()
+          .single()
+        obatCat = newObat
+      }
+      if (!alkesCat) {
+        const { data: newAlkes } = await supabase
+          .from('medicine_categories')
+          .insert({ name: 'Alkes', description: 'Alat Kesehatan / Lab' })
+          .select()
+          .single()
+        alkesCat = newAlkes
+      }
+
+      // Auto-categorize existing NULL category medicines/alkes
+      const { data: uncategorized } = await supabase
+        .from('medicines')
+        .select('*')
+        .is('category_id', null)
+
+      if (uncategorized && uncategorized.length > 0) {
+        for (const m of uncategorized) {
+          const name = m.name.toLowerCase()
+          const unit = m.unit?.toLowerCase() || ''
+          const isAlkes = name.includes('strip') || name.includes('alkes') || unit.includes('pcs') || unit.includes('strip')
+          
+          await supabase
+            .from('medicines')
+            .update({ category_id: isAlkes ? alkesCat.id : obatCat.id })
+            .eq('id', m.id)
+        }
+      }
+
+      return { obatId: obatCat?.id || null, alkesId: alkesCat?.id || null }
+    } catch (err) {
+      console.error('Error ensuring categories exist:', err)
+      return { obatId: null, alkesId: null }
+    }
+  }
 
   const fetchMedicines = async () => {
     setIsLoading(true)
     try {
-      const { data } = await supabase.from('medicines').select('*, batches:medicine_batches(*)').eq('is_active', true).order('name')
+      const { data } = await supabase
+        .from('medicines')
+        .select('*, category:medicine_categories(*), batches:medicine_batches(*)')
+        .eq('is_active', true)
+        .order('name')
       setMedicines(data as any || [])
     } catch {
       setMedicines([
@@ -215,40 +283,142 @@ export const MedicineManagement: React.FC = () => {
       fetchMedicines()
     } catch (err: any) {
       console.error(err)
-      alert(`Gagal menyimpan batch: ${err.message || err}`)
+      useToastStore.getState().showToast(`Gagal menyimpan batch: ${err.message || err}`, 'error')
+    }
+  }
+
+  const handleOpenAddForm = () => {
+    setEditingMedicine(null)
+    setFormData({
+      name: '',
+      unit: activeTab === 'alkes' ? 'pcs' : 'tablet',
+      price: 0,
+      minimum_stock: 10,
+      category_id: activeTab === 'alkes' ? (categories.alkesId || '') : (categories.obatId || '')
+    })
+    setShowForm(true)
+  }
+
+  const handleOpenEditForm = (medicine: any) => {
+    setEditingMedicine(medicine)
+    setFormData({
+      name: medicine.name,
+      unit: medicine.unit,
+      price: medicine.price || 0,
+      minimum_stock: medicine.minimum_stock || 10,
+      category_id: medicine.category_id || (activeTab === 'alkes' ? (categories.alkesId || '') : (categories.obatId || ''))
+    })
+    setShowForm(true)
+  }
+
+  const handleDeleteMedicine = async (medicine: any) => {
+    const isConfirmed = window.confirm(`Apakah Anda yakin ingin menghapus "${medicine.name}"?`)
+    if (!isConfirmed) return
+
+    try {
+      const { error } = await supabase
+        .from('medicines')
+        .update({ is_active: false })
+        .eq('id', medicine.id)
+
+      if (error) throw error
+      useToastStore.getState().showToast(`"${medicine.name}" berhasil dihapus.`, 'success')
+      fetchMedicines()
+    } catch (err: any) {
+      console.error(err)
+      useToastStore.getState().showToast(`Gagal menghapus obat/alkes: ${err.message || err}`, 'error')
     }
   }
 
   const handleSubmit = async () => {
     try {
-      const { error } = await supabase.from('medicines').insert({ ...formData, is_active: true })
+      let error;
+      if (editingMedicine) {
+        const res = await supabase
+          .from('medicines')
+          .update({
+            name: formData.name,
+            unit: formData.unit,
+            minimum_stock: formData.minimum_stock,
+            category_id: formData.category_id
+          })
+          .eq('id', editingMedicine.id)
+        error = res.error
+      } else {
+        const res = await supabase
+          .from('medicines')
+          .insert({ ...formData, is_active: true })
+        error = res.error
+      }
+
       if (error) throw error
+      useToastStore.getState().showToast(editingMedicine ? 'Obat/Alkes berhasil diperbarui!' : 'Obat/Alkes baru berhasil ditambahkan!', 'success')
       setShowForm(false)
-      setFormData({ name: '', unit: 'tablet', price: 0, minimum_stock: 10 })
+      setEditingMedicine(null)
+      setFormData({
+        name: '',
+        unit: activeTab === 'alkes' ? 'pcs' : 'tablet',
+        price: 0,
+        minimum_stock: 10,
+        category_id: activeTab === 'alkes' ? (categories.alkesId || '') : (categories.obatId || '')
+      })
       fetchMedicines()
     } catch (err: any) {
       console.error(err)
-      alert(`Gagal menambah obat: ${err.message || err}`)
+      useToastStore.getState().showToast(`Gagal menyimpan obat/alkes: ${err.message || err}`, 'error')
     }
   }
 
+  const filteredMedicines = medicines.filter(m => {
+    if (activeTab === 'alkes') {
+      return m.category_id === categories.alkesId || m.category?.name === 'Alkes'
+    } else {
+      return m.category_id !== categories.alkesId && m.category?.name !== 'Alkes'
+    }
+  })
+
   return (
     <PageLayout title="Kelola Obat / Alkes" subtitle="Manajemen stok obat, alat kesehatan (alkes), dan batch">
+      
+      {/* Category Tabs */}
+      <div className="flex gap-2 mb-4 bg-surface-150 p-1.5 rounded-2xl w-fit border border-surface-200">
+        <button
+          onClick={() => setActiveTab('obat')}
+          className={`px-5 py-2 text-sm font-bold rounded-xl transition-all ${
+            activeTab === 'obat'
+              ? 'bg-white text-primary-700 shadow-sm border border-surface-100'
+              : 'text-surface-600 hover:text-surface-800'
+          }`}
+        >
+          Daftar Obat
+        </button>
+        <button
+          onClick={() => setActiveTab('alkes')}
+          className={`px-5 py-2 text-sm font-bold rounded-xl transition-all ${
+            activeTab === 'alkes'
+              ? 'bg-white text-primary-700 shadow-sm border border-surface-100'
+              : 'text-surface-600 hover:text-surface-800'
+          }`}
+        >
+          Daftar Alkes (Lab)
+        </button>
+      </div>
+
       <Card>
         <CardHeader
-          title={`Total: ${medicines.length} Obat / Alkes`}
+          title={`Total: ${filteredMedicines.length} ${activeTab === 'alkes' ? 'Alkes' : 'Obat'}`}
           action={
-            <Button variant="primary" size="sm" leftIcon={<Plus size={16} />} onClick={() => setShowForm(true)}>
-              Tambah Obat / Alkes
+            <Button variant="primary" size="sm" leftIcon={<Plus size={16} />} onClick={handleOpenAddForm}>
+              Tambah {activeTab === 'alkes' ? 'Alkes' : 'Obat'}
             </Button>
           }
         />
         <DataTable
           columns={[
-            { key: 'name', header: 'Nama Obat / Alkes', render: (m) => <span className="font-semibold">{m.name}</span> },
+            { key: 'name', header: `Nama ${activeTab === 'alkes' ? 'Alkes' : 'Obat'}`, render: (m) => <span className="font-semibold">{m.name}</span> },
             { key: 'unit', header: 'Satuan' },
             { key: 'stock', header: 'Stok', render: (m) => {
-              const stock = (m as any).batches?.reduce((s: number, b: any) => s + (b.quantity ?? 0), 0) ?? 0
+              const stock = (m as any).batches?.reduce((s: number, b: any) => s + (b.current_stock ?? 0), 0) ?? 0
               return (
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{stock}</span>
@@ -263,19 +433,36 @@ export const MedicineManagement: React.FC = () => {
                 <Button size="sm" variant="primary" onClick={() => handleManageStok(m)}>
                   Kelola Stok
                 </Button>
+                <Button size="sm" variant="secondary" onClick={() => handleOpenEditForm(m)}>
+                  Edit
+                </Button>
+                <Button size="sm" variant="danger" onClick={() => handleDeleteMedicine(m)}>
+                  Hapus
+                </Button>
               </div>
             )},
           ]}
-          data={medicines}
+          data={filteredMedicines}
           keyExtractor={(m) => m.id}
           isLoading={isLoading}
         />
       </Card>
 
       {/* Main Medicine Add Modal */}
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Tambah Obat / Alkes">
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title={editingMedicine ? `Edit ${activeTab === 'alkes' ? 'Alkes' : 'Obat'} — ${editingMedicine.name}` : `Tambah ${activeTab === 'alkes' ? 'Alkes' : 'Obat'}`}>
         <div className="space-y-4">
-          <Input label="Nama Obat / Alkes *" value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
+          <Input label="Nama *" value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
+          
+          <Select
+            label="Jenis *"
+            value={formData.category_id}
+            onChange={(e) => setFormData(p => ({ ...p, category_id: e.target.value }))}
+            options={[
+              { value: categories.obatId || '', label: 'Obat' },
+              { value: categories.alkesId || '', label: 'Alkes (Lab)' },
+            ]}
+          />
+
           <Select label="Satuan *" value={formData.unit} onChange={(e) => setFormData(p => ({ ...p, unit: e.target.value }))} options={[
             { value: 'tablet', label: 'Tablet' }, { value: 'kapsul', label: 'Kapsul' },
             { value: 'sirup', label: 'Sirup (ml)' }, { value: 'salep', label: 'Salep (tube)' },
@@ -608,7 +795,7 @@ export const Reports: React.FC = () => (
         { title: 'Export Excel', desc: 'Data mentah per tabel', icon: <BarChart3 size={32} />, type: 'excel' },
         { title: 'Backup Data', desc: 'Backup database klinik', icon: <Settings size={32} />, type: 'backup' },
       ].map((report) => (
-        <Card key={report.type} hoverable onClick={() => alert(`Export ${report.type} - Coming soon!`)}>
+        <Card key={report.type} hoverable onClick={() => useToastStore.getState().showToast(`Export ${report.type} - Coming soon!`, 'info')}>
           <div className="text-center py-4">
             <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-primary-600">
               {report.icon}
@@ -746,11 +933,11 @@ export const DisplaySettingsManager: React.FC = () => {
           })
       }
 
-      alert('Pengaturan layar berhasil disimpan!')
+      useToastStore.getState().showToast('Pengaturan layar berhasil disimpan!', 'success')
       setSelectedScreen(null)
     } catch (err) {
       console.error(err)
-      alert('Gagal menyimpan pengaturan')
+      useToastStore.getState().showToast('Gagal menyimpan pengaturan', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -762,7 +949,7 @@ export const DisplaySettingsManager: React.FC = () => {
 
   const handleCopyLink = (path: string) => {
     navigator.clipboard.writeText(getAbsoluteUrl(path))
-    alert('Link disalin ke clipboard!')
+    useToastStore.getState().showToast('Link disalin ke clipboard!', 'success')
   }
 
   return (

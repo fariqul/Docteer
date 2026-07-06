@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 import { PageLayout } from '../../components/layout'
 import { Button, Input, Textarea, Card, CardHeader, Badge, DataTable } from '../../components/ui'
-import { useAuthStore } from '../../stores'
+import { useAuthStore, useToastStore } from '../../stores'
 import { supabase } from '../../lib/supabase'
 import { formatTime, getStatusLabel } from '../../lib/utils'
 import type { Patient, PatientVisit } from '../../types/database'
@@ -156,10 +156,12 @@ export const Registration: React.FC = () => {
 
       setLastQueueNumber(queueNumber)
       setShowSuccess(true)
+      useToastStore.getState().showToast(`Pasien "${data.name}" berhasil didaftarkan dengan nomor antrean ${queueNumber}!`, 'success')
       reset()
       setTimeout(() => setShowSuccess(false), 5000)
-    } catch (err) {
+    } catch (err: any) {
       console.error('Registration error:', err)
+      useToastStore.getState().showToast(`Gagal mendaftarkan pasien: ${err.message || err}`, 'error')
     } finally {
       setIsSubmitting(false)
     }

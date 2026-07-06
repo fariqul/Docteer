@@ -10,7 +10,7 @@ import {
 import { PageLayout } from '../../components/layout'
 import { Button, Input, Card, CardHeader, Badge, DataTable } from '../../components/ui'
 import { Modal } from '../../components/ui'
-import { useAuthStore } from '../../stores'
+import { useAuthStore, useToastStore } from '../../stores'
 import { supabase } from '../../lib/supabase'
 import { formatTime, getStatusLabel } from '../../lib/utils'
 import type { Queue, Medicine } from '../../types/database'
@@ -280,7 +280,7 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
   const addPrescriptionItem = (medicine: any) => {
     if (prescriptionItems.find((p) => p.medicine_id === medicine.id)) return
     if (medicine.total_stock <= 0) {
-      alert('Stok obat habis!')
+      useToastStore.getState().showToast('Stok obat habis!', 'warning')
       return
     }
 
