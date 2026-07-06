@@ -108,6 +108,8 @@ export function getStatusLabel(status: string): string {
     preparing: 'Disiapkan',
     ready: 'Siap',
     dispensed: 'Diserahkan',
+    referred_to_lab: 'Di Lab',
+    back_from_lab: 'Selesai Lab',
   }
   return labels[status] || status
 }
@@ -124,6 +126,8 @@ export function getStatusColor(status: string): string {
     preparing: 'bg-primary-100 text-primary-700',
     ready: 'bg-accent-100 text-accent-700',
     dispensed: 'bg-surface-100 text-surface-600',
+    referred_to_lab: 'bg-purple-100 text-purple-700',
+    back_from_lab: 'bg-cyan-100 text-cyan-700',
   }
   return colors[status] || 'bg-surface-100 text-surface-700'
 }

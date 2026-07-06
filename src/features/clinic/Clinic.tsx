@@ -66,6 +66,9 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
     asam_urat: false,
   })
 
+  // Laboratory results state
+  const [labResults, setLabResults] = useState<any[]>([])
+
   useEffect(() => {
     fetchQueue()
     fetchMedicines()
@@ -85,7 +88,7 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
         .from('queues')
         .select('*, patient:patients(*)')
         .eq('department', department)
-        .in('status', ['waiting', 'called', 'in_progress'])
+        .in('status', ['waiting', 'called', 'in_progress', 'referred_to_lab', 'back_from_lab'])
         .order('is_priority', { ascending: false })
         .order('created_at', { ascending: true })
 
@@ -148,6 +151,7 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
     })
     setPatientDetail(null)
     setPatientVitals(null)
+    setLabResults([])
 
     // 1. Fetch Patient details (Riwayat, Alergi)
     try {
@@ -174,6 +178,102 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
       }
     } catch (err) {
       console.error(err)
+    }
+
+    // 3. Fetch Diagnosis (if exists from previous consultation)
+    try {
+      const { data } = await supabase
+        .from('diagnoses')
+        .select('*')
+        .eq('visit_id', queue.visit_id)
+        .eq('department', department)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (data && data.length > 0) {
+        const diag = data[0]
+        setDiagnosis(diag.diagnosis || '')
+        setIcd10(diag.icd10_code || '')
+        
+        // Parse concatenated notes
+        const rawNotes = diag.notes || ''
+        let parsedAnamnesis = ''
+        let parsedPhysical = ''
+        let parsedNotes = ''
+        
+        if (rawNotes.includes('Anamnesis:')) {
+          const parts = rawNotes.split('Pemeriksaan Fisis:')
+          parsedAnamnesis = parts[0].replace('Anamnesis:', '').trim()
+          if (parts[1]) {
+            const subParts = parts[1].split('Catatan Tambahan:')
+            parsedPhysical = subParts[0].trim()
+            if (subParts[1]) {
+              parsedNotes = subParts[1].trim()
+            }
+          }
+        } else {
+          parsedNotes = rawNotes
+        }
+        
+        if (parsedAnamnesis) {
+          setAnamnesis(parsedAnamnesis)
+        }
+        setPhysicalExam(parsedPhysical)
+        setNotes(parsedNotes)
+      }
+    } catch (err) {
+      console.error('Failed to fetch existing diagnosis:', err)
+    }
+
+    // 4. Fetch Procedure (if exists)
+    try {
+      const { data } = await supabase
+        .from('procedures')
+        .select('*')
+        .eq('visit_id', queue.visit_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+
+      if (data && data.length > 0) {
+        setProcedure(data[0].procedure_name || '')
+      }
+    } catch (err) {
+      console.error('Failed to fetch existing procedure:', err)
+    }
+
+    // 5. Fetch Prescription items (if exists)
+    try {
+      const { data: rxList } = await supabase
+        .from('prescriptions')
+        .select('*, items:prescription_items(*, medicine:medicines(*))')
+        .eq('visit_id', queue.visit_id)
+        .order('created_at', { ascending: false })
+
+      if (rxList && rxList.length > 0) {
+        const rx = rxList[0]
+        const items = rx.items?.map((item: any) => ({
+          medicine_id: item.medicine_id,
+          medicine_name: item.medicine?.name || '',
+          quantity: item.quantity,
+          dosage: item.dosage || '',
+          notes: item.notes || '',
+        })) || []
+        setPrescriptionItems(items)
+      }
+    } catch (err) {
+      console.error('Failed to fetch existing prescription items:', err)
+    }
+
+    // 6. Fetch Lab results (if any)
+    try {
+      const { data } = await supabase
+        .from('laboratory_results')
+        .select('*')
+        .eq('visit_id', queue.visit_id)
+      setLabResults(data || [])
+    } catch (err) {
+      console.error('Failed to fetch lab results:', err)
+      setLabResults([])
     }
   }
 
@@ -265,47 +365,107 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
     setIsSubmitting(true)
 
     try {
-      // Save diagnosis
+      // Upsert diagnosis
       const concatenatedNotes = [
         anamnesis ? `Anamnesis: ${anamnesis}` : '',
         physicalExam ? `Pemeriksaan Fisis: ${physicalExam}` : '',
         notes ? `Catatan Tambahan: ${notes}` : ''
       ].filter(Boolean).join('\n')
 
-      await supabase.from('diagnoses').insert({
-        visit_id: selectedQueue.visit_id,
-        diagnosis,
-        icd10_code: icd10 || null,
-        notes: concatenatedNotes || null,
-        department,
-        diagnosed_by: currentStaff?.id,
-      })
+      const { data: existingDiag } = await supabase
+        .from('diagnoses')
+        .select('id')
+        .eq('visit_id', selectedQueue.visit_id)
+        .eq('department', department)
+        .maybeSingle()
 
-      // Save procedure if any
-      if (procedure) {
-        await supabase.from('procedures').insert({
+      if (existingDiag) {
+        await supabase
+          .from('diagnoses')
+          .update({
+            diagnosis,
+            icd10_code: icd10 || null,
+            notes: concatenatedNotes || null,
+            diagnosed_by: currentStaff?.id,
+          })
+          .eq('id', existingDiag.id)
+      } else {
+        await supabase.from('diagnoses').insert({
           visit_id: selectedQueue.visit_id,
-          procedure_name: procedure,
-          performed_by: currentStaff?.id,
+          diagnosis,
+          icd10_code: icd10 || null,
+          notes: concatenatedNotes || null,
+          department,
+          diagnosed_by: currentStaff?.id,
         })
       }
 
-      // Save prescription
-      if (prescriptionItems.length > 0) {
-        const { data: rx } = await supabase
-          .from('prescriptions')
-          .insert({
-            visit_id: selectedQueue.visit_id,
-            prescribed_by: currentStaff?.id,
-            status: 'pending',
-          })
-          .select()
-          .single()
+      // Upsert procedure if any
+      if (procedure) {
+        const { data: existingProc } = await supabase
+          .from('procedures')
+          .select('id')
+          .eq('visit_id', selectedQueue.visit_id)
+          .maybeSingle()
 
-        if (rx) {
+        if (existingProc) {
+          await supabase
+            .from('procedures')
+            .update({
+              procedure_name: procedure,
+              performed_by: currentStaff?.id,
+            })
+            .eq('id', existingProc.id)
+        } else {
+          await supabase.from('procedures').insert({
+            visit_id: selectedQueue.visit_id,
+            procedure_name: procedure,
+            performed_by: currentStaff?.id,
+          })
+        }
+      }
+
+      // Upsert prescription
+      if (prescriptionItems.length > 0) {
+        const { data: existingRx } = await supabase
+          .from('prescriptions')
+          .select('id')
+          .eq('visit_id', selectedQueue.visit_id)
+          .maybeSingle()
+
+        let rxId = existingRx?.id
+
+        if (existingRx) {
+          // Delete old items
+          await supabase
+            .from('prescription_items')
+            .delete()
+            .eq('prescription_id', existingRx.id)
+          
+          await supabase
+            .from('prescriptions')
+            .update({
+              prescribed_by: currentStaff?.id,
+              status: 'pending',
+            })
+            .eq('id', existingRx.id)
+        } else {
+          const { data: rx } = await supabase
+            .from('prescriptions')
+            .insert({
+              visit_id: selectedQueue.visit_id,
+              prescribed_by: currentStaff?.id,
+              status: 'pending',
+            })
+            .select()
+            .single()
+          if (rx) rxId = rx.id
+        }
+
+        if (rxId) {
           for (const item of prescriptionItems) {
             await supabase.from('prescription_items').insert({
-              prescription_id: rx.id,
+              prescription_id: rxId,
               medicine_id: item.medicine_id,
               quantity: item.quantity,
               dosage: item.dosage,
@@ -315,28 +475,21 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
             })
           }
         }
+      } else {
+        // If doctor cleared prescription items, delete any existing rx
+        const { data: existingRx } = await supabase
+          .from('prescriptions')
+          .select('id')
+          .eq('visit_id', selectedQueue.visit_id)
+          .maybeSingle()
+        if (existingRx) {
+          await supabase.from('prescription_items').delete().eq('prescription_id', existingRx.id)
+          await supabase.from('prescriptions').delete().eq('id', existingRx.id)
+        }
       }
 
-      // ALWAYS Create pharmacy queue (even if no prescription is given)
-      // Use original queue number so that patients keep their number!
-      await supabase.from('queues').insert({
-        visit_id: selectedQueue.visit_id,
-        patient_id: selectedQueue.patient_id,
-        department: 'pharmacy',
-        queue_number: selectedQueue.queue_number,
-        status: 'waiting',
-      })
-
-      await supabase.from('queue_histories').insert({
-        visit_id: selectedQueue.visit_id,
-        from_department: department,
-        to_department: 'pharmacy',
-        queue_number: selectedQueue.queue_number,
-        transferred_by: currentStaff?.id,
-      })
-
-      // Refer to lab (non-linear flow / new instruction to lab with new queue number)
       if (referToLab) {
+        // Rujuk ke lab: buat antrean lab, update status poli ke 'referred_to_lab', jangan buat antrean farmasi
         let labQueueNumber = 'L001'
         try {
           const { data: qn } = await supabase.rpc('generate_queue_number', { p_prefix: 'L' })
@@ -360,15 +513,26 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
         }
         for (const [testType] of selectedTests) {
           const info = labTestDetails[testType]
-          await supabase.from('laboratory_results').insert({
-            visit_id: selectedQueue.visit_id,
-            test_type: testType,
-            result: null, // null means pending
-            unit: info.unit,
-            normal_range: info.normalRange,
-            notes: 'Rujukan dokter',
-            examined_by: null,
-          })
+          
+          // Check if this test type already exists to avoid inserting duplicates
+          const { data: existingTest } = await supabase
+            .from('laboratory_results')
+            .select('id')
+            .eq('visit_id', selectedQueue.visit_id)
+            .eq('test_type', testType)
+            .maybeSingle()
+
+          if (!existingTest) {
+            await supabase.from('laboratory_results').insert({
+              visit_id: selectedQueue.visit_id,
+              test_type: testType,
+              result: null, // pending
+              unit: info.unit,
+              normal_range: info.normalRange,
+              notes: 'Rujukan dokter',
+              examined_by: null,
+            })
+          }
         }
 
         await supabase.from('queue_histories').insert({
@@ -379,13 +543,36 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
           transferred_by: currentStaff?.id,
           notes: 'Instruksi lab dari dokter di Poli',
         })
-      }
 
-      // Complete current queue
-      await supabase
-        .from('queues')
-        .update({ status: 'completed', completed_at: new Date().toISOString() })
-        .eq('id', selectedQueue.id)
+        // Update current queue status to 'referred_to_lab'
+        await supabase
+          .from('queues')
+          .update({ status: 'referred_to_lab' })
+          .eq('id', selectedQueue.id)
+      } else {
+        // Tidak rujuk ke lab: buat antrean apotek/farmasi, update status poli ke 'completed'
+        await supabase.from('queues').insert({
+          visit_id: selectedQueue.visit_id,
+          patient_id: selectedQueue.patient_id,
+          department: 'pharmacy',
+          queue_number: selectedQueue.queue_number,
+          status: 'waiting',
+        })
+
+        await supabase.from('queue_histories').insert({
+          visit_id: selectedQueue.visit_id,
+          from_department: department,
+          to_department: 'pharmacy',
+          queue_number: selectedQueue.queue_number,
+          transferred_by: currentStaff?.id,
+        })
+
+        // Complete current queue
+        await supabase
+          .from('queues')
+          .update({ status: 'completed', completed_at: new Date().toISOString() })
+          .eq('id', selectedQueue.id)
+      }
 
       setShowExamForm(false)
       setSelectedQueue(null)
@@ -418,16 +605,50 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
               <span className="font-bold text-lg text-accent-700">{q.queue_number}</span>
             )},
             { key: 'name', header: 'Nama Pasien', render: (q) => q.patient?.name || '-' },
-            { key: 'status', header: 'Status', render: (q) => (
-              <Badge variant={q.status === 'waiting' ? 'warning' : 'primary'}>{getStatusLabel(q.status)}</Badge>
-            )},
+            { key: 'status', header: 'Status', render: (q) => {
+              let badgeVariant: 'warning' | 'primary' | 'accent' | 'purple' | 'info' = 'primary'
+              let dot = false
+              let pulse = false
+              if (q.status === 'waiting') badgeVariant = 'warning'
+              else if (q.status === 'in_progress') badgeVariant = 'accent'
+              else if (q.status === 'referred_to_lab') badgeVariant = 'purple'
+              else if (q.status === 'back_from_lab') {
+                badgeVariant = 'info'
+                dot = true
+                pulse = true
+              }
+              return (
+                <Badge variant={badgeVariant} dot={dot} pulse={pulse}>
+                  {getStatusLabel(q.status)}
+                </Badge>
+              )
+            }},
             { key: 'time', header: 'Waktu Masuk', render: (q) => formatTime(q.created_at) },
-            { key: 'actions', header: 'Aksi', render: (q) => (
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline" onClick={() => handleCallPatient(q)} leftIcon={<Volume2 size={14} />}>Panggil</Button>
-                <Button size="sm" variant="primary" onClick={() => handleStartExam(q)} leftIcon={<HeartPulse size={14} />}>Periksa</Button>
-              </div>
-            )},
+            { key: 'actions', header: 'Aksi', render: (q) => {
+              const isReferredToLab = q.status === 'referred_to_lab'
+              return (
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleCallPatient(q)}
+                    disabled={isReferredToLab}
+                    leftIcon={<Volume2 size={14} />}
+                  >
+                    {q.status === 'back_from_lab' ? 'Panggil Kembali' : 'Panggil'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => handleStartExam(q)}
+                    disabled={isReferredToLab}
+                    leftIcon={<HeartPulse size={14} />}
+                  >
+                    {q.status === 'back_from_lab' ? 'Periksa Ulang' : 'Periksa'}
+                  </Button>
+                </div>
+              )
+            }},
           ]}
           data={queueList}
           keyExtractor={(q) => q.id}
@@ -494,6 +715,54 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
               </div>
             </div>
           </div>
+
+          {/* Laboratory Results */}
+          {labResults.length > 0 && (
+            <div className="bg-purple-50 border border-purple-200 rounded-2xl p-5 space-y-3 shadow-sm">
+              <h4 className="font-bold text-purple-800 border-b border-purple-200 pb-2 text-sm uppercase tracking-wider flex items-center gap-2">
+                <FlaskConical size={16} className="text-purple-600 animate-pulse" />
+                Hasil Pemeriksaan Laboratorium
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {labResults.map((res) => {
+                  const isPending = res.result === null || res.result === undefined || res.result === ''
+                  return (
+                    <div key={res.id} className="bg-white p-4 rounded-xl border border-purple-100 flex flex-col justify-between shadow-sm">
+                      <div>
+                        <div className="flex justify-between items-start mb-2">
+                          <p className="text-xs font-bold text-surface-500 uppercase tracking-wider text-surface-600">
+                            {res.test_type === 'gula_darah' ? 'Gula Darah' :
+                             res.test_type === 'kolesterol' ? 'Kolesterol' :
+                             res.test_type === 'asam_urat' ? 'Asam Urat' :
+                             res.test_type === 'spirometri' ? 'Spirometri' : res.test_type}
+                          </p>
+                          <span className="text-[10px] text-surface-500 font-semibold bg-surface-100 px-1.5 py-0.5 rounded">
+                            Ref: {res.normal_range} {res.unit}
+                          </span>
+                        </div>
+                        {isPending ? (
+                          <div className="flex items-center gap-1.5 mt-1 text-amber-600 italic text-sm font-semibold">
+                            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                            <span>Menunggu Hasil...</span>
+                          </div>
+                        ) : (
+                          <p className="text-2xl font-black text-purple-700 mt-1">
+                            {res.result} <span className="text-xs font-semibold text-surface-500">{res.unit}</span>
+                          </p>
+                        )}
+                      </div>
+                      {res.notes && !isPending && (
+                        <div className="text-xs text-surface-650 bg-surface-50 rounded-lg p-2 mt-3 border border-surface-100">
+                          <span className="font-bold text-surface-700">Catatan Lab: </span>
+                          <span className="italic">{res.notes}</span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           {/* 1. Anamnesis */}
           <div className="space-y-2">
@@ -737,8 +1006,16 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button variant="primary" size="lg" className="flex-1 text-base py-3" isLoading={isSubmitting} onClick={handleSubmit} disabled={!diagnosis || !anamnesis} leftIcon={<Save size={18} />}>
-              Simpan & Rujuk ke Apotek
+            <Button
+              variant="primary"
+              size="lg"
+              className="flex-1 text-base py-3"
+              isLoading={isSubmitting}
+              onClick={handleSubmit}
+              disabled={!diagnosis || !anamnesis}
+              leftIcon={<Save size={18} />}
+            >
+              {referToLab ? 'Simpan & Rujuk ke Laboratorium' : 'Simpan & Rujuk ke Apotek'}
             </Button>
             <Button variant="secondary" size="lg" onClick={() => setShowExamForm(false)}>Batal</Button>
           </div>

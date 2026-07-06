@@ -436,12 +436,12 @@ export const AdminMonitoring: React.FC = () => {
       const { count: waiting } = await supabase
         .from('queues')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'waiting')
+        .in('status', ['waiting', 'back_from_lab'])
 
       const { count: inProgress } = await supabase
         .from('queues')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'in_progress')
+        .in('status', ['in_progress', 'referred_to_lab'])
 
       const { count: completed } = await supabase
         .from('queues')

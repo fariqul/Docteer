@@ -168,7 +168,7 @@ export interface Queue {
   patient_id: string
   department: string
   queue_number: string
-  status: 'waiting' | 'called' | 'in_progress' | 'completed' | 'skipped'
+  status: 'waiting' | 'called' | 'in_progress' | 'completed' | 'skipped' | 'referred_to_lab' | 'back_from_lab'
   is_priority: boolean
   called_by?: string
   called_at?: string

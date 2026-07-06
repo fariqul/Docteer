@@ -66,7 +66,7 @@ export const DisplayMonitor: React.FC = () => {
         .from('queues')
         .select('*, patient:patients(*)')
         .eq('department', dept)
-        .eq('status', 'waiting')
+        .in('status', ['waiting', 'back_from_lab'])
         .order('is_priority', { ascending: false })
         .order('created_at', { ascending: true })
         .limit(5)

@@ -218,6 +218,13 @@ export const Laboratory: React.FC = () => {
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', selectedQueue.id)
 
+      // Update corresponding Poli queue status to 'back_from_lab'
+      await supabase
+        .from('queues')
+        .update({ status: 'back_from_lab' })
+        .eq('visit_id', selectedQueue.visit_id)
+        .eq('status', 'referred_to_lab')
+
       setShowLabForm(false)
       setSelectedQueue(null)
       fetchQueue()
