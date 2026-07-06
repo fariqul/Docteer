@@ -4,7 +4,6 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import {
   Stethoscope,
-  Volume2,
   ArrowRight,
   Heart,
   Thermometer,
@@ -75,18 +74,7 @@ export const Triage: React.FC = () => {
     }
   }
 
-  const handleCallPatient = async (queue: Queue) => {
-    try {
-      await supabase
-        .from('queues')
-        .update({ status: 'called', called_at: new Date().toISOString() })
-        .eq('id', queue.id)
-      fetchQueue()
-    } catch (err) {
-      console.error(err)
-    }
-    setSelectedQueue(queue)
-  }
+
 
   const handleStartExam = async (queue: Queue) => {
     setSelectedQueue(queue)
@@ -228,9 +216,6 @@ export const Triage: React.FC = () => {
             {
               key: 'actions', header: 'Aksi', render: (q) => (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => handleCallPatient(q)} leftIcon={<Volume2 size={14} />}>
-                    Panggil
-                  </Button>
                   <Button size="sm" variant="primary" onClick={() => handleStartExam(q)} leftIcon={<Stethoscope size={14} />}>
                     Periksa
                   </Button>

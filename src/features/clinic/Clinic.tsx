@@ -3,8 +3,6 @@ import {
   HeartPulse,
   Volume2,
   Save,
-  FileText,
-  Pill,
   Trash2,
   FlaskConical,
   FileSpreadsheet,
@@ -21,9 +19,8 @@ interface PrescriptionItemInput {
   medicine_id: string
   medicine_name: string
   quantity: number
-  dosage: string
-  frequency: string
-  duration: string
+  dosage: string // resep minum obat
+  notes?: string // cara pemakaian obat (opsional)
 }
 
 interface ClinicProps {
@@ -44,10 +41,17 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
   const [patientVitals, setPatientVitals] = useState<any | null>(null)
 
   // Diagnosis form
+  const [anamnesis, setAnamnesis] = useState('')
+  const [physicalExam, setPhysicalExam] = useState('')
   const [diagnosis, setDiagnosis] = useState('')
   const [icd10, setIcd10] = useState('')
   const [procedure, setProcedure] = useState('')
   const [notes, setNotes] = useState('')
+
+  // ICD-10 autocomplete states
+  const [icdList, setIcdList] = useState<any[]>([])
+  const [filteredIcd, setFilteredIcd] = useState<any[]>([])
+  const [showIcdSuggestions, setShowIcdSuggestions] = useState(false)
 
   // Prescription
   const [prescriptionItems, setPrescriptionItems] = useState<PrescriptionItemInput[]>([])
@@ -56,10 +60,22 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
 
   // Refer back to lab
   const [referToLab, setReferToLab] = useState(false)
+  const [labTestSelections, setLabTestSelections] = useState({
+    gula_darah: false,
+    kolesterol: false,
+    asam_urat: false,
+  })
 
   useEffect(() => {
     fetchQueue()
     fetchMedicines()
+    
+    // Asynchronously load the 1.8MB ICD-10 database to optimize initial load times
+    import('../../assets/icd10.json')
+      .then((module) => {
+        setIcdList(module.default || module)
+      })
+      .catch((err) => console.error('Failed to load ICD-10 database:', err))
   }, [])
 
   const fetchQueue = async () => {
@@ -117,12 +133,19 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
   const handleStartExam = async (queue: Queue) => {
     setSelectedQueue(queue)
     setShowExamForm(true)
+    setAnamnesis('')
+    setPhysicalExam('')
     setDiagnosis('')
     setIcd10('')
     setProcedure('')
     setNotes('')
     setPrescriptionItems([])
     setReferToLab(false)
+    setLabTestSelections({
+      gula_darah: false,
+      kolesterol: false,
+      asam_urat: false,
+    })
     setPatientDetail(null)
     setPatientVitals(null)
 
@@ -147,6 +170,7 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
         .order('created_at', { ascending: false })
       if (data && data.length > 0) {
         setPatientVitals(data[0])
+        setAnamnesis(data[0].complaint || '')
       }
     } catch (err) {
       console.error(err)
@@ -166,9 +190,8 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
         medicine_id: medicine.id,
         medicine_name: medicine.name,
         quantity: 1,
-        dosage: '1 tablet',
-        frequency: '3x sehari',
-        duration: '3 hari',
+        dosage: '3x sehari 1 tablet', // default resep minum obat
+        notes: '', // optional cara pemakaian obat
       },
     ])
     setMedicineSearch('')
@@ -184,17 +207,76 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
     )
   }
 
+  // ICD-10 Autocomplete Handlers
+  const handleDiagnosisChange = (val: string) => {
+    setDiagnosis(val)
+    if (val.trim().length >= 2) {
+      const q = val.toLowerCase()
+      const filtered = icdList.filter(
+        (item) =>
+          item.kode_icd.toLowerCase().includes(q) ||
+          item.nama_icd.toLowerCase().includes(q) ||
+          (item.nama_icd_indo && item.nama_icd_indo.toLowerCase().includes(q))
+      ).slice(0, 30)
+      setFilteredIcd(filtered)
+      setShowIcdSuggestions(true)
+    } else {
+      setFilteredIcd([])
+      setShowIcdSuggestions(false)
+    }
+  }
+
+  const handleIcd10Change = (val: string) => {
+    setIcd10(val)
+    if (val.trim().length >= 1) {
+      const q = val.toLowerCase()
+      const filtered = icdList.filter(
+        (item) =>
+          item.kode_icd.toLowerCase().includes(q) ||
+          item.nama_icd.toLowerCase().includes(q) ||
+          (item.nama_icd_indo && item.nama_icd_indo.toLowerCase().includes(q))
+      ).slice(0, 30)
+      setFilteredIcd(filtered)
+      setShowIcdSuggestions(true)
+    } else {
+      setFilteredIcd([])
+      setShowIcdSuggestions(false)
+    }
+  }
+
+  const selectIcdItem = (item: any) => {
+    setDiagnosis(item.nama_icd_indo?.trim() || item.nama_icd)
+    setIcd10(item.kode_icd)
+    setShowIcdSuggestions(false)
+    setFilteredIcd([])
+  }
+
   const handleSubmit = async () => {
     if (!selectedQueue || !diagnosis) return
+
+    // Konfirmasi jika dokter belum memilih rujukan ke laboratorium
+    if (!referToLab) {
+      const confirmSubmit = window.confirm(
+        "Perhatian:\nAnda tidak memilih 'Kirim Instruksi ke Laboratorium' untuk pasien ini.\n\nApakah Anda yakin ingin langsung menyelesaikan pemeriksaan dan merujuk pasien ke Apotek/Farmasi?"
+      )
+      if (!confirmSubmit) return // Batal simpan, kembali ke formulir
+    }
+
     setIsSubmitting(true)
 
     try {
       // Save diagnosis
+      const concatenatedNotes = [
+        anamnesis ? `Anamnesis: ${anamnesis}` : '',
+        physicalExam ? `Pemeriksaan Fisis: ${physicalExam}` : '',
+        notes ? `Catatan Tambahan: ${notes}` : ''
+      ].filter(Boolean).join('\n')
+
       await supabase.from('diagnoses').insert({
         visit_id: selectedQueue.visit_id,
         diagnosis,
         icd10_code: icd10 || null,
-        notes: notes || null,
+        notes: concatenatedNotes || null,
         department,
         diagnosed_by: currentStaff?.id,
       })
@@ -227,8 +309,9 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
               medicine_id: item.medicine_id,
               quantity: item.quantity,
               dosage: item.dosage,
-              frequency: item.frequency,
-              duration: item.duration,
+              frequency: '',
+              duration: '',
+              notes: item.notes || null,
             })
           }
         }
@@ -267,6 +350,26 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
           queue_number: labQueueNumber,
           status: 'waiting',
         })
+
+        // Save specific test instructions as pending laboratory results
+        const selectedTests = Object.entries(labTestSelections).filter(([, val]) => val)
+        const labTestDetails: Record<string, { unit: string; normalRange: string }> = {
+          gula_darah: { unit: 'mg/dL', normalRange: '70-100' },
+          kolesterol: { unit: 'mg/dL', normalRange: '<200' },
+          asam_urat: { unit: 'mg/dL', normalRange: '3.5-7.2' },
+        }
+        for (const [testType] of selectedTests) {
+          const info = labTestDetails[testType]
+          await supabase.from('laboratory_results').insert({
+            visit_id: selectedQueue.visit_id,
+            test_type: testType,
+            result: null, // null means pending
+            unit: info.unit,
+            normal_range: info.normalRange,
+            notes: 'Rujukan dokter',
+            examined_by: null,
+          })
+        }
 
         await supabase.from('queue_histories').insert({
           visit_id: selectedQueue.visit_id,
@@ -392,37 +495,117 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
             </div>
           </div>
 
-          {/* Form: Diagnosis */}
-          <div>
-            <h4 className="text-label text-surface-700 mb-3 flex items-center gap-2 font-bold">
-              <FileText size={18} className="text-primary-500" />
-              Input Diagnosa & Tindakan
+          {/* 1. Anamnesis */}
+          <div className="space-y-2">
+            <h4 className="text-label text-surface-700 font-bold flex items-center gap-2">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">1</span>
+              Anamnesis *
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input label="Diagnosa Utama *" placeholder="Masukkan hasil diagnosa..." value={diagnosis} onChange={(e) => setDiagnosis(e.target.value)} required />
-              <Input label="Kode ICD-10 (Opsional)" placeholder="Contoh: A00.0" value={icd10} onChange={(e) => setIcd10(e.target.value)} />
-            </div>
-          </div>
-
-          {/* Form: Action/Tindakan */}
-          <Input label="Tindakan Medis (Opsional)" placeholder="Tuliskan tindakan medis yang diberikan..." value={procedure} onChange={(e) => setProcedure(e.target.value)} />
-
-          {/* Form: Doctor Notes */}
-          <div>
-            <label className="block text-label text-surface-700 mb-1.5">Catatan Tambahan (Opsional)</label>
             <textarea
-              placeholder="Tambahkan catatan khusus..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Tulis keluhan utama, riwayat penyakit sekarang, riwayat penyakit dahulu, dll..."
+              value={anamnesis}
+              onChange={(e) => setAnamnesis(e.target.value)}
               className="w-full rounded-xl border border-surface-200 px-4 py-3 text-body focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
-              rows={2}
+              rows={3}
+              required
             />
           </div>
 
-          {/* Form: Realtime Prescription */}
-          <div>
-            <h4 className="text-label text-surface-700 mb-3 flex items-center gap-2 font-bold">
-              <Pill size={18} className="text-accent-500" />
+          {/* 2. Pemeriksaan Fisis & Tindakan Medis */}
+          <div className="space-y-3">
+            <h4 className="text-label text-surface-700 font-bold flex items-center gap-2">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">2</span>
+              Pemeriksaan Fisis & Tindakan Medis
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-surface-500 font-medium mb-1">Hasil Pemeriksaan Fisis</label>
+                <textarea
+                  placeholder="Tulis kondisi fisik, tanda vital tambahan, status lokalis, dll..."
+                  value={physicalExam}
+                  onChange={(e) => setPhysicalExam(e.target.value)}
+                  className="w-full rounded-xl border border-surface-200 px-4 py-3 text-body focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+                  rows={2}
+                />
+              </div>
+              <Input
+                label="Tindakan Medis (Opsional)"
+                placeholder="Tuliskan tindakan medis yang diberikan (misal: penjahitan luka, pencabutan gigi, dll)..."
+                value={procedure}
+                onChange={(e) => setProcedure(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* 3. Diagnosa & Kode ICD-10 */}
+          <div className="space-y-3">
+            <h4 className="text-label text-surface-700 font-bold flex items-center gap-2">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">3</span>
+              Diagnosa & Kode ICD-10
+            </h4>
+            <div className="relative">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="relative">
+                  <Input
+                    label="Diagnosa Utama *"
+                    placeholder="Ketik diagnosa (Indonesia/Inggris)..."
+                    value={diagnosis}
+                    onChange={(e) => handleDiagnosisChange(e.target.value)}
+                    onFocus={() => {
+                      if (diagnosis.trim().length >= 2) setShowIcdSuggestions(true)
+                    }}
+                    onBlur={() => setTimeout(() => setShowIcdSuggestions(false), 200)}
+                    required
+                  />
+                </div>
+                <div className="relative">
+                  <Input
+                    label="Kode ICD-10 (Opsional)"
+                    placeholder="Ketik kode (Contoh: A00.0)..."
+                    value={icd10}
+                    onChange={(e) => handleIcd10Change(e.target.value)}
+                    onFocus={() => {
+                      if (icd10.trim().length >= 1) setShowIcdSuggestions(true)
+                    }}
+                    onBlur={() => setTimeout(() => setShowIcdSuggestions(false), 200)}
+                  />
+                </div>
+              </div>
+
+              {/* Suggestions Dropdown overlay */}
+              {showIcdSuggestions && filteredIcd.length > 0 && (
+                <div className="absolute left-0 right-0 z-20 bg-white border border-surface-200 rounded-xl shadow-xl mt-1 max-h-[220px] overflow-y-auto divide-y divide-surface-100">
+                  {filteredIcd.map((item) => (
+                    <button
+                      key={item.kode_icd}
+                      type="button"
+                      onMouseDown={() => selectIcdItem(item)}
+                      className="w-full px-4 py-3 text-left hover:bg-primary-50 transition-colors flex flex-col gap-0.5"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2 py-0.5 rounded-md">
+                          {item.kode_icd}
+                        </span>
+                        {item.nama_icd_indo && (
+                          <span className="font-semibold text-surface-800 text-sm">
+                            {item.nama_icd_indo}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-surface-500 italic">
+                        {item.nama_icd}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 4. Resep Obat */}
+          <div className="space-y-3">
+            <h4 className="text-label text-surface-700 font-bold flex items-center gap-2">
+              <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary-100 text-primary-700 text-xs font-bold">4</span>
               Resep Obat (Terintegrasi Realtime)
             </h4>
             <div className="relative mb-3">
@@ -461,8 +644,9 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
                           <Trash2 size={16} />
                         </button>
                       </div>
-                      <div className="grid grid-cols-4 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
+                          <label className="block text-xs text-surface-500 font-medium mb-1">Kuantitas *</label>
                           <Input
                             placeholder="Jumlah"
                             type="number"
@@ -475,9 +659,22 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
                             <p className="text-xs text-red-500 mt-1">Melebihi stok ({med.total_stock})</p>
                           )}
                         </div>
-                        <Input placeholder="Dosis (1 tab)" value={item.dosage} onChange={(e) => updatePrescriptionItem(item.medicine_id, 'dosage', e.target.value)} />
-                        <Input placeholder="Frekuensi (3x sehari)" value={item.frequency} onChange={(e) => updatePrescriptionItem(item.medicine_id, 'frequency', e.target.value)} />
-                        <Input placeholder="Durasi (3 hari)" value={item.duration} onChange={(e) => updatePrescriptionItem(item.medicine_id, 'duration', e.target.value)} />
+                        <div>
+                          <label className="block text-xs text-surface-500 font-medium mb-1">Resep Minum Obat *</label>
+                          <Input
+                            placeholder="Contoh: 3x sehari 1 tablet"
+                            value={item.dosage}
+                            onChange={(e) => updatePrescriptionItem(item.medicine_id, 'dosage', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-surface-500 font-medium mb-1">Cara Pemakaian (Opsional)</label>
+                          <Input
+                            placeholder="Contoh: setelah makan"
+                            value={item.notes || ''}
+                            onChange={(e) => updatePrescriptionItem(item.medicine_id, 'notes', e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
                   )
@@ -486,8 +683,20 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
             )}
           </div>
 
+          {/* 5. Catatan Tambahan */}
+          <div className="space-y-1">
+            <label className="block text-label text-surface-700 font-bold">Catatan Lain (Opsional)</label>
+            <textarea
+              placeholder="Tambahkan catatan khusus lain jika ada..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full rounded-xl border border-surface-200 px-4 py-3 text-body focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none"
+              rows={2}
+            />
+          </div>
+
           {/* Form: Rujuk Balik / Instruksi Lab */}
-          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+          <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 space-y-3">
             <label className="flex items-center gap-3 cursor-pointer">
               <input
                 type="checkbox"
@@ -502,10 +711,33 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
                 <p className="text-sm text-amber-600">Buat nomor antrean rujukan Lab baru untuk pasien ini</p>
               </div>
             </label>
+
+            {referToLab && (
+              <div className="pt-2 border-t border-amber-200/50 space-y-2">
+                <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Pilih Pemeriksaan Lab:</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {[
+                    { key: 'gula_darah', label: 'Gula Darah' },
+                    { key: 'kolesterol', label: 'Kolesterol' },
+                    { key: 'asam_urat', label: 'Asam Urat' },
+                  ].map((test) => (
+                    <label key={test.key} className="flex items-center gap-2 bg-white/60 hover:bg-white rounded-lg p-2.5 border border-amber-100 cursor-pointer select-none text-sm text-amber-900 font-medium">
+                      <input
+                        type="checkbox"
+                        checked={(labTestSelections as any)[test.key]}
+                        onChange={(e) => setLabTestSelections(p => ({ ...p, [test.key]: e.target.checked }))}
+                        className="w-4 h-4 rounded border-amber-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      {test.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-2">
-            <Button variant="primary" size="lg" className="flex-1 text-base py-3" isLoading={isSubmitting} onClick={handleSubmit} disabled={!diagnosis} leftIcon={<Save size={18} />}>
+            <Button variant="primary" size="lg" className="flex-1 text-base py-3" isLoading={isSubmitting} onClick={handleSubmit} disabled={!diagnosis || !anamnesis} leftIcon={<Save size={18} />}>
               Simpan & Rujuk ke Apotek
             </Button>
             <Button variant="secondary" size="lg" onClick={() => setShowExamForm(false)}>Batal</Button>

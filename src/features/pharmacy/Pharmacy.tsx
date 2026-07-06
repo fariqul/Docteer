@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import {
-  Volume2,
   CheckCircle2,
   Printer,
   Package,
@@ -55,17 +54,7 @@ export const Pharmacy: React.FC = () => {
     }
   }
 
-  const handleCallPatient = async (queue: any) => {
-    try {
-      await supabase
-        .from('queues')
-        .update({ status: 'called', called_at: new Date().toISOString() })
-        .eq('id', queue.id)
-      fetchPharmacyQueues()
-    } catch (err) {
-      console.error(err)
-    }
-  }
+
 
   const handleDispense = async (queue: any) => {
     setIsProcessing(true)
@@ -177,8 +166,9 @@ export const Pharmacy: React.FC = () => {
         </style>
       </head>
       <body>
-        <div class="center bold">DOCTEER CLINIC</div>
-        <div class="center">Bakti Sosial Puskesmas</div>
+        <div class="center bold">DOCTEER</div>
+        <div class="center bold">CAMP CLINIC</div>
+        <div class="center">Baksos Mahasiswa Kedokteran UMI Makassar</div>
         <div class="divider"></div>
         <div class="flex"><span>Pasien:</span><span class="bold">${patientName}</span></div>
         <div class="flex"><span>Nomor:</span><span class="bold">${queue.queue_number}</span></div>
@@ -189,9 +179,8 @@ export const Pharmacy: React.FC = () => {
         ${items.length === 0 ? '<div class="center">Tidak Ada Resep Obat</div>' : items.map((item: any) => `
           <div class="item">
             <div class="bold">${item.medicine?.name || '-'}</div>
-            <div>${item.dosage || ''} - ${item.frequency || ''}</div>
+            <div>${item.dosage || ''} ${item.notes ? `(${item.notes})` : ''}</div>
             <div>Jumlah: ${item.quantity} ${item.medicine?.unit || ''}</div>
-            <div>Durasi: ${item.duration || '-'}</div>
           </div>
         `).join('<div class="divider"></div>')}
         <div class="divider"></div>
@@ -274,7 +263,7 @@ export const Pharmacy: React.FC = () => {
                           <div>
                             <p className="font-medium text-surface-800">{item.medicine?.name}</p>
                             <p className="text-sm text-surface-500">
-                              {item.dosage} - {item.frequency} - {item.duration}
+                              {item.dosage} {item.notes ? `(${item.notes})` : ''}
                             </p>
                           </div>
                           <div className="text-right">
@@ -288,9 +277,6 @@ export const Pharmacy: React.FC = () => {
 
                   {/* Actions */}
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => handleCallPatient(queue)} leftIcon={<Volume2 size={14} />}>
-                      Panggil
-                    </Button>
                     <Button size="sm" variant="accent" onClick={() => handleDispense(queue)} isLoading={isProcessing} leftIcon={<CheckCircle2 size={14} />}>
                       {items.length === 0 ? 'Selesaikan Antrean' : 'Serahkan Obat'}
                     </Button>

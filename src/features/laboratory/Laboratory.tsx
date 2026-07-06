@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import {
   FlaskConical,
-  Volume2,
   Save,
 } from 'lucide-react'
 import { PageLayout } from '../../components/layout'
@@ -27,10 +26,87 @@ export const Laboratory: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [labResults, setLabResults] = useState<Record<string, { result: string; notes: string }>>({})
+  const [instructedLabTests, setInstructedLabTests] = useState<string[]>([])
+  const [existingLabRows, setExistingLabRows] = useState<any[]>([])
+  const [stripStocks, setStripStocks] = useState<Record<string, number>>({
+    gula_darah: 0,
+    kolesterol: 0,
+    asam_urat: 0,
+  })
 
   useEffect(() => {
     fetchQueue()
+    fetchStripStocks()
   }, [])
+
+  const fetchStripStocks = async () => {
+    try {
+      const { data } = await supabase
+        .from('medicines')
+        .select('*, batches:medicine_batches(*)')
+        .eq('is_active', true)
+        .or('name.ilike.%strip gula darah%,name.ilike.%strip kolesterol%,name.ilike.%strip asam urat%')
+
+      if (data) {
+        const stocks = { gula_darah: 0, kolesterol: 0, asam_urat: 0 }
+        data.forEach((m: any) => {
+          const totalStock = m.batches?.reduce((acc: number, b: any) => acc + (b.quantity || 0), 0) || 0
+          const name = m.name.toLowerCase()
+          if (name.includes('gula darah') || name.includes('sugar')) {
+            stocks.gula_darah = totalStock
+          } else if (name.includes('kolesterol') || name.includes('cholesterol')) {
+            stocks.kolesterol = totalStock
+          } else if (name.includes('asam urat') || name.includes('uric')) {
+            stocks.asam_urat = totalStock
+          }
+        })
+        setStripStocks(stocks)
+      }
+    } catch (err) {
+      console.error('Error fetching strip stocks:', err)
+    }
+  }
+
+  const deductStripStock = async (testType: string) => {
+    try {
+      let searchPattern = ''
+      if (testType === 'gula_darah') searchPattern = 'strip gula darah'
+      else if (testType === 'kolesterol') searchPattern = 'strip kolesterol'
+      else if (testType === 'asam_urat') searchPattern = 'strip asam urat'
+      else return
+
+      const { data: meds } = await supabase
+        .from('medicines')
+        .select('id')
+        .ilike('name', `%${searchPattern}%`)
+        .eq('is_active', true)
+        .limit(1)
+
+      if (meds && meds.length > 0) {
+        const medicineId = meds[0].id
+        const { data: batches } = await supabase
+          .from('medicine_batches')
+          .select('*')
+          .eq('medicine_id', medicineId)
+          .gt('quantity', 0)
+          .order('expired_date', { ascending: true })
+
+        if (batches && batches.length > 0) {
+          const batch = batches[0]
+          const newQty = Math.max(0, batch.quantity - 1)
+          await supabase
+            .from('medicine_batches')
+            .update({
+              quantity: newQty,
+              current_stock: newQty,
+            })
+            .eq('id', batch.id)
+        }
+      }
+    } catch (err) {
+      console.error(`Gagal memotong stok strip untuk ${testType}:`, err)
+    }
+  }
 
   const fetchQueue = async () => {
     setIsLoading(true)
@@ -59,22 +135,37 @@ export const Laboratory: React.FC = () => {
     }
   }
 
-  const handleCallPatient = async (queue: Queue) => {
-    try {
-      await supabase
-        .from('queues')
-        .update({ status: 'called', called_at: new Date().toISOString() })
-        .eq('id', queue.id)
-      fetchQueue()
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const handleStartExam = (queue: Queue) => {
+  const handleStartExam = async (queue: Queue) => {
     setSelectedQueue(queue)
     setLabResults({})
+    setInstructedLabTests([])
+    setExistingLabRows([])
     setShowLabForm(true)
+
+    try {
+      const { data } = await supabase
+        .from('laboratory_results')
+        .select('*')
+        .eq('visit_id', queue.visit_id)
+      
+      if (data && data.length > 0) {
+        setExistingLabRows(data)
+        const types = data.map((r: any) => r.test_type)
+        setInstructedLabTests(types)
+        
+        // Pre-fill initial states
+        const initialResults: any = {}
+        data.forEach((r: any) => {
+          initialResults[r.test_type] = {
+            result: r.result || '',
+            notes: r.notes === 'Rujukan dokter' ? '' : (r.notes || ''),
+          }
+        })
+        setLabResults(initialResults)
+      }
+    } catch (err) {
+      console.error('Failed to fetch existing lab rows:', err)
+    }
   }
 
   const handleLabResultChange = (testType: string, field: 'result' | 'notes', value: string) => {
@@ -93,15 +184,32 @@ export const Laboratory: React.FC = () => {
       const entries = Object.entries(labResults).filter(([, v]) => v.result)
       for (const [testType, result] of entries) {
         const testInfo = labTests.find((t) => t.type === testType)
-        await supabase.from('laboratory_results').insert({
-          visit_id: selectedQueue.visit_id,
-          test_type: testType,
-          result: result.result,
-          unit: testInfo?.unit,
-          normal_range: testInfo?.normalRange,
-          notes: result.notes,
-          examined_by: currentStaff?.id,
-        })
+        const existingRecord = existingLabRows.find((r) => r.test_type === testType)
+
+        if (existingRecord) {
+          await supabase
+            .from('laboratory_results')
+            .update({
+              result: result.result,
+              notes: result.notes,
+              examined_by: currentStaff?.id,
+              created_at: new Date().toISOString()
+            })
+            .eq('id', existingRecord.id)
+        } else {
+          await supabase.from('laboratory_results').insert({
+            visit_id: selectedQueue.visit_id,
+            test_type: testType,
+            result: result.result,
+            unit: testInfo?.unit,
+            normal_range: testInfo?.normalRange,
+            notes: result.notes,
+            examined_by: currentStaff?.id,
+          })
+        }
+
+        // Deduct 1 strip from stock for this test type
+        await deductStripStock(testType)
       }
 
       // Complete queue
@@ -113,6 +221,7 @@ export const Laboratory: React.FC = () => {
       setShowLabForm(false)
       setSelectedQueue(null)
       fetchQueue()
+      fetchStripStocks()
     } catch (err) {
       console.error('Submit error:', err)
     } finally {
@@ -125,6 +234,26 @@ export const Laboratory: React.FC = () => {
       title="Laboratorium"
       subtitle={`Petugas: ${currentStaff?.name || '-'}`}
     >
+      {/* Strip Stocks Stats Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        {[
+          { key: 'gula_darah', label: 'Stok Strip Gula Darah', color: 'text-sky-600', bg: 'bg-sky-50/50 border-sky-100' },
+          { key: 'kolesterol', label: 'Stok Strip Kolesterol', color: 'text-emerald-600', bg: 'bg-emerald-50/50 border-emerald-100' },
+          { key: 'asam_urat', label: 'Stok Strip Asam Urat', color: 'text-violet-600', bg: 'bg-violet-50/50 border-violet-100' },
+        ].map((item) => {
+          const stock = stripStocks[item.key] || 0
+          return (
+            <div key={item.key} className={`border rounded-2xl p-4 flex items-center justify-between bg-white shadow-sm ${item.bg}`}>
+              <div>
+                <p className="text-xs text-surface-500 font-bold uppercase tracking-wider">{item.label}</p>
+                <p className={`text-2xl font-black mt-1 ${item.color}`}>{stock} <span className="text-xs font-semibold text-surface-400">pcs</span></p>
+              </div>
+              <FlaskConical className={`w-8 h-8 opacity-45 ${item.color}`} />
+            </div>
+          )
+        })}
+      </div>
+
       <Card>
         <CardHeader
           title="Antrean Lab"
@@ -151,9 +280,6 @@ export const Laboratory: React.FC = () => {
             {
               key: 'actions', header: 'Aksi', render: (q) => (
                 <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => handleCallPatient(q)} leftIcon={<Volume2 size={14} />}>
-                    Panggil
-                  </Button>
                   <Button size="sm" variant="primary" onClick={() => handleStartExam(q)} leftIcon={<FlaskConical size={14} />}>
                     Input Hasil
                   </Button>
@@ -171,7 +297,9 @@ export const Laboratory: React.FC = () => {
       {/* Lab Results Modal */}
       <Modal isOpen={showLabForm} onClose={() => setShowLabForm(false)} title={`Hasil Lab - ${selectedQueue?.patient?.name}`} size="lg">
         <div className="space-y-6">
-          {labTests.map((test) => (
+          {labTests
+            .filter((test: any) => instructedLabTests.length === 0 || instructedLabTests.includes(test.type))
+            .map((test: any) => (
             <div key={test.type} className="bg-surface-50 rounded-xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-semibold text-surface-800">{test.label}</h4>

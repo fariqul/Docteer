@@ -258,7 +258,6 @@ export const MedicineManagement: React.FC = () => {
               )
             }},
             { key: 'minimum_stock', header: 'Min. Stok' },
-            { key: 'price', header: 'Harga', render: (m) => `Rp ${m.price.toLocaleString()}` },
             { key: 'actions', header: 'Aksi', render: (m) => (
               <div className="flex gap-2">
                 <Button size="sm" variant="primary" onClick={() => handleManageStok(m)}>
@@ -282,10 +281,7 @@ export const MedicineManagement: React.FC = () => {
             { value: 'sirup', label: 'Sirup (ml)' }, { value: 'salep', label: 'Salep (tube)' },
             { value: 'injeksi', label: 'Injeksi (ampul)' },
           ]} />
-          <div className="grid grid-cols-2 gap-4">
-            <Input label="Harga (Rp)" type="number" value={formData.price} onChange={(e) => setFormData(p => ({ ...p, price: parseInt(e.target.value) || 0 }))} />
-            <Input label="Min. Stok" type="number" value={formData.minimum_stock} onChange={(e) => setFormData(p => ({ ...p, minimum_stock: parseInt(e.target.value) || 0 }))} />
-          </div>
+          <Input label="Min. Stok" type="number" value={formData.minimum_stock} onChange={(e) => setFormData(p => ({ ...p, minimum_stock: parseInt(e.target.value) || 0 }))} />
           <div className="flex gap-3 pt-2">
             <Button variant="primary" className="flex-1" onClick={handleSubmit}>Simpan</Button>
             <Button variant="secondary" onClick={() => setShowForm(false)}>Batal</Button>
@@ -653,11 +649,7 @@ export const ClinicSettings: React.FC = () => (
 // ======================== Display Settings Manager ========================
 export const DisplaySettingsManager: React.FC = () => {
   const screens = [
-    { key: 'triage', label: 'Layar Pemeriksaan Awal (Tensi)', path: '/display/tensi' },
-    { key: 'lab', label: 'Layar Laboratorium', path: '/display/lab' },
-    { key: 'poli_umum', label: 'Layar Poli Umum', path: '/display/poli-umum' },
-    { key: 'poli_gigi', label: 'Layar Poli Gigi', path: '/display/poli-gigi' },
-    { key: 'pharmacy', label: 'Layar Farmasi (Apotek)', path: '/display/farmasi' },
+    { key: 'poli_umum', label: 'Layar Antrean Poli (Umum & Gigi)', path: '/display' },
   ]
 
   const [selectedScreen, setSelectedScreen] = useState<any | null>(null)

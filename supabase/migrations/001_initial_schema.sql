@@ -397,15 +397,16 @@ ON CONFLICT DO NOTHING;
 
 -- Default system settings
 INSERT INTO system_settings (key, value) VALUES
+  ('clinic_logo', '"/assets/logo.png"'),
   ('clinic_name', '"Docteer Clinic"'),
-  ('clinic_address', '"Puskesmas - Bakti Sosial Mahasiswa Kedokteran"'),
+  ('clinic_address', '"Baksos Mahasiswa Kedokteran UMI Makassar"'),
   ('expired_alert_days', '30'),
   ('timezone', '"Asia/Jakarta"')
 ON CONFLICT (key) DO NOTHING;
 
 -- Default running text
-INSERT INTO running_texts (text, is_active) VALUES
-  ('Selamat datang di Docteer Clinic — Bakti Sosial Puskesmas oleh Mahasiswa Kedokteran — Layanan gratis untuk masyarakat — Terima kasih atas partisipasi Anda', true);
+INSERT INTO running_texts (text, is_active, department) VALUES
+  ('Baksos Mahasiswa Kedokteran UMI Makassar', true, 'poli_umum');
 
 -- Disable RLS on all tables to allow public CRUD operations from anon client
 ALTER TABLE staff DISABLE ROW LEVEL SECURITY;

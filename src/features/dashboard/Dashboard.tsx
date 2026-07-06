@@ -212,27 +212,17 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Display Monitor Links */}
+      {/* Display Monitor */}
       <div className="max-w-7xl mx-auto px-6 pb-8">
         <h3 className="text-title text-surface-800 mb-4">Display Monitor</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[
-            { label: 'Tensi', path: '/display/tensi' },
-            { label: 'Lab', path: '/display/lab' },
-            { label: 'Poli Umum', path: '/display/poli-umum' },
-            { label: 'Poli Gigi', path: '/display/poli-gigi' },
-            { label: 'Farmasi', path: '/display/farmasi' },
-          ].map((display) => (
-            <button
-              key={display.path}
-              onClick={() => window.open(display.path, '_blank')}
-              className="bg-white border border-surface-200 rounded-xl p-4 hover:border-primary-300 hover:bg-primary-50 transition-all text-center group"
-            >
-              <Monitor size={24} className="mx-auto mb-2 text-surface-400 group-hover:text-primary-500" />
-              <p className="text-sm font-medium text-surface-700 group-hover:text-primary-700">{display.label}</p>
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={() => window.open('/display', '_blank')}
+          className="bg-white border border-surface-200 rounded-xl p-5 hover:border-primary-300 hover:bg-primary-50 transition-all text-center group w-full sm:w-auto sm:min-w-[280px]"
+        >
+          <Monitor size={28} className="mx-auto mb-2 text-surface-400 group-hover:text-primary-500" />
+          <p className="text-sm font-semibold text-surface-700 group-hover:text-primary-700">Buka Layar Antrean Poli</p>
+          <p className="text-xs text-surface-400 mt-1">Poli Umum & Poli Gigi (1 Layar)</p>
+        </button>
       </div>
     </div>
   )

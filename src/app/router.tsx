@@ -217,6 +217,7 @@ export const router = createBrowserRouter([
   {
     element: <DisplayLayout />,
     children: [
+      { path: '/display', element: <DisplayMonitor /> },
       { path: '/display/:room', element: <DisplayMonitor /> },
     ],
   },
