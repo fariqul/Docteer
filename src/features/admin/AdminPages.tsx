@@ -280,8 +280,7 @@ export const MedicineManagement: React.FC = () => {
             { value: 'tablet', label: 'Tablet' }, { value: 'kapsul', label: 'Kapsul' },
             { value: 'sirup', label: 'Sirup (ml)' }, { value: 'salep', label: 'Salep (tube)' },
             { value: 'injeksi', label: 'Injeksi (ampul)' },
-            { value: 'pcs', label: 'Pcs (Alkes / Strip)' },
-            { value: 'strip', label: 'Strip' },
+            { value: 'pcs', label: 'Pcs / Strip' },
           ]} />
           <Input label="Min. Stok" type="number" value={formData.minimum_stock} onChange={(e) => setFormData(p => ({ ...p, minimum_stock: parseInt(e.target.value) || 0 }))} />
           <div className="flex gap-3 pt-2">
