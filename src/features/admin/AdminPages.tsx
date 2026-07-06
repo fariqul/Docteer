@@ -233,19 +233,19 @@ export const MedicineManagement: React.FC = () => {
   }
 
   return (
-    <PageLayout title="Kelola Obat" subtitle="Manajemen stok obat dan batch">
+    <PageLayout title="Kelola Obat / Alkes" subtitle="Manajemen stok obat, alat kesehatan (alkes), dan batch">
       <Card>
         <CardHeader
-          title={`Total: ${medicines.length} Obat`}
+          title={`Total: ${medicines.length} Obat / Alkes`}
           action={
             <Button variant="primary" size="sm" leftIcon={<Plus size={16} />} onClick={() => setShowForm(true)}>
-              Tambah Obat
+              Tambah Obat / Alkes
             </Button>
           }
         />
         <DataTable
           columns={[
-            { key: 'name', header: 'Nama Obat', render: (m) => <span className="font-semibold">{m.name}</span> },
+            { key: 'name', header: 'Nama Obat / Alkes', render: (m) => <span className="font-semibold">{m.name}</span> },
             { key: 'unit', header: 'Satuan' },
             { key: 'stock', header: 'Stok', render: (m) => {
               const stock = (m as any).batches?.reduce((s: number, b: any) => s + (b.quantity ?? 0), 0) ?? 0
@@ -273,13 +273,15 @@ export const MedicineManagement: React.FC = () => {
       </Card>
 
       {/* Main Medicine Add Modal */}
-      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Tambah Obat">
+      <Modal isOpen={showForm} onClose={() => setShowForm(false)} title="Tambah Obat / Alkes">
         <div className="space-y-4">
-          <Input label="Nama Obat *" value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
+          <Input label="Nama Obat / Alkes *" value={formData.name} onChange={(e) => setFormData(p => ({ ...p, name: e.target.value }))} />
           <Select label="Satuan *" value={formData.unit} onChange={(e) => setFormData(p => ({ ...p, unit: e.target.value }))} options={[
             { value: 'tablet', label: 'Tablet' }, { value: 'kapsul', label: 'Kapsul' },
             { value: 'sirup', label: 'Sirup (ml)' }, { value: 'salep', label: 'Salep (tube)' },
             { value: 'injeksi', label: 'Injeksi (ampul)' },
+            { value: 'pcs', label: 'Pcs (Alkes / Strip)' },
+            { value: 'strip', label: 'Strip' },
           ]} />
           <Input label="Min. Stok" type="number" value={formData.minimum_stock} onChange={(e) => setFormData(p => ({ ...p, minimum_stock: parseInt(e.target.value) || 0 }))} />
           <div className="flex gap-3 pt-2">
