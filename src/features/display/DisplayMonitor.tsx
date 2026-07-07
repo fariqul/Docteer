@@ -237,8 +237,8 @@ export const DisplayMonitor: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between px-8 py-4 bg-black/20">
         <div className="flex items-center gap-5">
-          <div className="h-16 w-52 bg-white rounded-2xl flex items-center justify-center p-2 shadow-md flex-shrink-0">
-            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-auto object-contain" />
+          <div className="h-16 w-48 sm:h-20 sm:w-64 bg-white/95 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center p-1 shadow-xl border border-white/20 flex-shrink-0">
+            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain drop-shadow-md scale-[1.35]" />
           </div>
           <div>
             <h1 className="text-2xl font-extrabold">Layar Antrean Poli</h1>

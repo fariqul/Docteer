@@ -61,8 +61,8 @@ export const StaffSelector: React.FC<StaffSelectorProps> = ({ department: _depar
     <div className="min-h-screen bg-surface-50 flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
-          <div className="h-28 w-80 bg-white border border-surface-200 rounded-3xl flex items-center justify-center mx-auto mb-6 p-4 shadow-md">
-            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain" />
+          <div className="h-36 w-96 flex items-center justify-center mx-auto mb-6">
+            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain drop-shadow-sm scale-110" />
           </div>
           <h1 className="text-headline text-surface-800 mb-2">Pilih Petugas</h1>
           <p className="text-surface-500">Ketik nama untuk mencari petugas</p>

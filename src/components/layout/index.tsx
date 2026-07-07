@@ -126,9 +126,9 @@ export const Sidebar: React.FC = () => {
         )}
       >
         {/* Logo */}
-        <div className="flex flex-col items-center justify-center px-4 py-6 border-b border-surface-100 bg-white">
-          <div className={cn("h-16 w-full flex items-center justify-center", !sidebarOpen && "h-10")}>
-            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-auto object-contain" />
+        <div className="flex flex-col items-center justify-center px-4 py-4 border-b border-surface-100">
+          <div className={cn("h-24 w-full flex items-center justify-center", !sidebarOpen && "h-12")}>
+            <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-auto object-contain scale-110" />
           </div>
           {sidebarOpen && (
             <p className="text-[10px] font-bold text-surface-400 mt-2 tracking-wider uppercase">Sistem Klinik & Antrean</p>
@@ -315,9 +315,9 @@ export const Header: React.FC<{ title?: string; subtitle?: string; actions?: Rea
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
           {title && (
-            <div>
-              <h1 className="text-title text-surface-800">{title}</h1>
-              {subtitle && <p className="text-sm text-surface-500">{subtitle}</p>}
+            <div className="min-w-0 flex-1">
+              <h1 className="text-title text-surface-800 truncate">{title}</h1>
+              {subtitle && <p className="text-sm text-surface-500 truncate">{subtitle}</p>}
             </div>
           )}
         </div>

@@ -258,7 +258,7 @@ export const Triage: React.FC = () => {
               <Activity size={18} className="text-primary-500" />
               Input Tanda Vital Pasien
             </h4>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-label text-surface-700 mb-1.5">Tekanan Darah (Tensi) *</label>
                 <div className="flex gap-2 items-center">
@@ -292,7 +292,7 @@ export const Triage: React.FC = () => {
           {/* Destinations */}
           <div>
             <h4 className="text-label text-surface-700 mb-3 font-bold">Tentukan Tujuan Rujukan *</h4>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[
                 { value: 'lab', label: 'Laboratorium', color: 'purple' },
                 { value: 'poli_umum', label: 'Poli Umum', color: 'green' },

@@ -366,7 +366,7 @@ export const Laboratory: React.FC = () => {
                 <h4 className="font-semibold text-surface-800">{test.label}</h4>
                 <span className="text-xs text-surface-400">Normal: {test.normalRange} {test.unit}</span>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Input
                   placeholder={`Hasil (${test.unit})`}
                   value={labResults[test.type]?.result || ''}

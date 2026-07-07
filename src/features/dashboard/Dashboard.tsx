@@ -7,6 +7,7 @@ import {
   HeartPulse,
   Pill,
   Monitor,
+  Menu,
 } from 'lucide-react'
 import { Card } from '../../components/ui'
 import { Badge } from '../../components/ui'
@@ -93,7 +94,7 @@ const moduleCards: ModuleCard[] = [
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate()
   const { setStaff, staffByDepartment } = useAuthStore()
-  const { sidebarOpen } = useUIStore()
+  const { sidebarOpen, toggleSidebar } = useUIStore()
   const [selectedModule, setSelectedModule] = useState<ModuleCard | null>(null)
 
   const handleModuleClick = (module: ModuleCard) => {
@@ -121,13 +122,20 @@ export const Dashboard: React.FC = () => {
   return (
     <div className={cn('min-h-screen bg-surface-50 transition-all duration-300', sidebarOpen ? 'lg:ml-64' : 'lg:ml-20')}>
       {/* Hero Section */}
-      <div className="bg-gradient-to-br from-primary-500 via-primary-600 to-accent-500 text-white">
-        <div className="max-w-7xl mx-auto px-6 py-12">
+      <div className="bg-gradient-to-b from-primary-600 via-primary-500 to-surface-50 text-white pb-16 relative">
+        <button
+          onClick={toggleSidebar}
+          className="absolute top-4 left-4 p-2.5 rounded-xl bg-white/20 hover:bg-white/30 backdrop-blur-md lg:hidden transition-colors z-20 flex items-center gap-2 border border-white/20 shadow-sm"
+        >
+          <Menu size={20} />
+          <span className="text-sm font-medium pr-1">Menu</span>
+        </button>
+        <div className="max-w-7xl mx-auto px-6 pt-16 sm:pt-12 pb-4">
           <div className="flex items-start justify-between">
             <div>
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
-                <div className="h-20 w-64 bg-white rounded-2xl flex items-center justify-center p-3 shadow-md">
-                  <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain" />
+                <div className="h-16 w-48 sm:h-24 sm:w-72 bg-white/95 backdrop-blur-sm rounded-xl sm:rounded-2xl flex items-center justify-center p-1 sm:p-2 shadow-xl border border-white/20 flex-shrink-0">
+                  <img src="/logo-docteer.png" alt="Logo Docteer" className="h-full w-full object-contain drop-shadow-sm scale-[1.35]" />
                 </div>
                 <div>
                   <p className="text-primary-100 text-body-lg font-medium">Sistem Informasi Klinik & Antrean Realtime</p>
@@ -157,7 +165,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Module Cards */}
-      <div className="max-w-7xl mx-auto px-6 -mt-6">
+      <div className="max-w-7xl mx-auto px-6 -mt-20 relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {moduleCards.map((module) => (
             <button
