@@ -793,41 +793,44 @@ export const Reports: React.FC = () => {
   const [exportTable, setExportTable] = useState('patients')
   const [dailyData, setDailyData] = useState<any>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
 
-  const generateDailyReport = async () => {
+  const generateDailyReport = async (dateStr: string) => {
     setIsGenerating(true)
     try {
-      const today = new Date().toISOString().split('T')[0]
-      const tomorrow = new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      const startOfDay = dateStr
+      const nextDayDate = new Date(dateStr)
+      nextDayDate.setDate(nextDayDate.getDate() + 1)
+      const endOfDay = nextDayDate.toISOString().split('T')[0]
 
-      // Fetch visits today
+      // Fetch visits on selected date
       const { data: visits } = await supabase
         .from('patient_visits')
         .select('*')
-        .gte('created_at', today)
-        .lt('created_at', tomorrow)
+        .gte('created_at', startOfDay)
+        .lt('created_at', endOfDay)
 
-      // Fetch queues today (for poli distribution)
+      // Fetch queues on selected date (for poli distribution)
       const { data: queues } = await supabase
         .from('queues')
         .select('*')
-        .gte('created_at', today)
-        .lt('created_at', tomorrow)
+        .gte('created_at', startOfDay)
+        .lt('created_at', endOfDay)
 
-      // Fetch diagnoses today
+      // Fetch diagnoses on selected date
       const { data: diagnoses } = await supabase
         .from('diagnoses')
         .select('diagnosis')
-        .gte('created_at', today)
-        .lt('created_at', tomorrow)
+        .gte('created_at', startOfDay)
+        .lt('created_at', endOfDay)
 
-      // Fetch medicine items today (Obat and Alkes)
+      // Fetch medicine items on selected date (Obat and Alkes)
       // Since medicine_transactions log all out movements, we can sum them up
       const { data: medicineTx } = await supabase
         .from('medicine_transactions')
         .select('*, medicine:medicines(*, category:medicine_categories(*))')
-        .gte('created_at', today)
-        .lt('created_at', tomorrow)
+        .gte('created_at', startOfDay)
+        .lt('created_at', endOfDay)
         .eq('transaction_type', 'out')
 
       const totalVisits = visits?.length || 0
@@ -871,13 +874,21 @@ export const Reports: React.FC = () => {
         .sort((a, b) => b.qty - a.qty)
         .slice(0, 10)
 
+      // Format date for display
+      const formattedDisplayDate = new Date(dateStr).toLocaleDateString('id-ID', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      })
+
       setDailyData({
         totalVisits,
         distribution,
         topDiagnoses,
         topMedicines,
         topAlkes,
-        date: new Date().toLocaleDateString('id-ID')
+        date: formattedDisplayDate
       })
       setShowDailyReport(true)
     } catch (err: any) {
@@ -941,7 +952,7 @@ export const Reports: React.FC = () => {
   return (
     <PageLayout title="Laporan" subtitle="Export dan cetak laporan">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card hoverable onClick={generateDailyReport}>
+        <Card hoverable onClick={() => generateDailyReport(selectedDate)}>
           <div className="text-center py-4">
             <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-primary-600">
               <FileText size={32} />
@@ -1001,7 +1012,19 @@ export const Reports: React.FC = () => {
           <div className="space-y-6" id="daily-report-content">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold">Laporan Harian Klinik</h2>
-              <p className="text-surface-500">Tanggal: {dailyData.date}</p>
+              <div className="mt-3 flex items-center justify-center gap-2 print-hidden">
+                <span className="text-sm text-surface-600 font-medium">Pilih Tanggal:</span>
+                <input 
+                  type="date" 
+                  value={selectedDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value)
+                    generateDailyReport(e.target.value)
+                  }}
+                  className="px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-surface-800"
+                />
+              </div>
+              <p className="text-surface-500 mt-2 font-medium print-only">Tanggal: {dailyData.date}</p>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
@@ -1027,7 +1050,7 @@ export const Reports: React.FC = () => {
               <div>
                 <h3 className="font-bold text-surface-800 mb-3 border-b pb-2">10 Penyakit Terbanyak (Top Diagnoses)</h3>
                 {dailyData.topDiagnoses.length === 0 ? (
-                  <p className="text-sm text-surface-500">Belum ada data diagnosa hari ini.</p>
+                  <p className="text-sm text-surface-500">Belum ada data diagnosa pada tanggal ini.</p>
                 ) : (
                   <ul className="space-y-2">
                     {dailyData.topDiagnoses.map(([diag, count]: [string, number], i: number) => (
@@ -1073,7 +1096,7 @@ export const Reports: React.FC = () => {
               )}
             </div>
 
-            <div className="flex justify-end pt-6 border-t">
+            <div className="flex justify-end pt-6 border-t print-hidden">
               <Button 
                 variant="primary" 
                 onClick={() => {
@@ -1084,13 +1107,15 @@ export const Reports: React.FC = () => {
                       printWindow.document.write(`
                         <html>
                           <head>
-                            <title>Print Laporan Harian</title>
+                            <title>Print Laporan Harian - ${dailyData.date}</title>
                             <style>
-                              body { font-family: sans-serif; padding: 20px; }
+                              body { font-family: sans-serif; padding: 20px; color: #1f2937; }
                               .text-center { text-align: center; }
                               .font-bold { font-weight: bold; }
                               .text-xl { font-size: 1.5rem; }
                               .mb-6 { margin-bottom: 1.5rem; }
+                              .mt-2 { margin-top: 0.5rem; }
+                              .font-medium { font-weight: 500; }
                               .grid { display: grid; gap: 1rem; }
                               .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
                               .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1107,9 +1132,8 @@ export const Reports: React.FC = () => {
                               .justify-between { justify-content: space-between; }
                               .space-y-2 > * + * { margin-top: 0.5rem; }
                               .space-y-6 > * + * { margin-top: 1.5rem; }
-                              @media print {
-                                button { display: none !important; }
-                              }
+                              .print-hidden { display: none !important; }
+                              .print-only { display: block !important; }
                             </style>
                           </head>
                           <body>
