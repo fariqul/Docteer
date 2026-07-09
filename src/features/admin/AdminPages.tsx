@@ -833,15 +833,15 @@ export const Reports: React.FC = () => {
       const totalVisits = visits?.length || 0
       
       const distribution = {
-        poli_umum: queues?.filter(q => q.department === 'poli_umum').length || 0,
-        poli_gigi: queues?.filter(q => q.department === 'poli_gigi').length || 0,
-        lab: queues?.filter(q => q.department === 'lab').length || 0,
-        pharmacy: queues?.filter(q => q.department === 'pharmacy').length || 0,
+        poli_umum: queues?.filter((q: any) => q.department === 'poli_umum').length || 0,
+        poli_gigi: queues?.filter((q: any) => q.department === 'poli_gigi').length || 0,
+        lab: queues?.filter((q: any) => q.department === 'lab').length || 0,
+        pharmacy: queues?.filter((q: any) => q.department === 'pharmacy').length || 0,
       }
 
       // Aggregate diagnoses
       const diagCounts: Record<string, number> = {}
-      diagnoses?.forEach(d => {
+      diagnoses?.forEach((d: any) => {
         if (d.diagnosis) {
           diagCounts[d.diagnosis] = (diagCounts[d.diagnosis] || 0) + 1
         }
