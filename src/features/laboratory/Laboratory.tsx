@@ -250,13 +250,17 @@ export const Laboratory: React.FC = () => {
         .eq('visit_id', selectedQueue.visit_id)
         .eq('status', 'referred_to_lab')
 
+      await supabase.from('activity_logs').insert({
+        staff_id: currentStaff?.id,
+        action: 'lab_test',
+        details: `Menyimpan hasil lab pasien: ${selectedQueue.patient?.name || ''}`,
+      })
+
       setShowLabForm(false)
       setSelectedQueue(null)
       fetchQueue()
       fetchStripStocks()
     } catch (err) {
-      console.error('Submit error:', err)
-    } finally {
       setIsSubmitting(false)
     }
   }

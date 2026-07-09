@@ -172,6 +172,12 @@ export const Triage: React.FC = () => {
         })
       }
 
+      await supabase.from('activity_logs').insert({
+        staff_id: currentStaff?.id,
+        action: 'triage_patient',
+        details: `Melakukan pemeriksaan awal (triase) untuk pasien: ${selectedQueue.patient?.name || ''}`,
+      })
+
       setShowExamForm(false)
       setSelectedQueue(null)
       reset()

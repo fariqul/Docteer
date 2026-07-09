@@ -14,7 +14,7 @@ export const DisplayMonitor: React.FC = () => {
   const [poliGigi, setPoliGigi] = useState<DepartmentData>({ currentQueue: null, waitingList: [] })
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isOnline, setIsOnline] = useState(navigator.onLine)
-  const [runningText, setRunningText] = useState('Baksos Mahasiswa Kedokteran UMI Makassar')
+  const [runningText, setRunningText] = useState('Baksos Mahasiswa Makassar')
   const [customBgColor, setCustomBgColor] = useState('')
 
   const lastCalledUmumRef = useRef<string | null>(null)

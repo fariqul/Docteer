@@ -574,6 +574,12 @@ export const Clinic: React.FC<ClinicProps> = ({ department, title }) => {
           .eq('id', selectedQueue.id)
       }
 
+      await supabase.from('activity_logs').insert({
+        staff_id: currentStaff?.id,
+        action: 'clinic_exam',
+        details: `Menyelesaikan pemeriksaan pasien: ${selectedQueue.patient?.name || ''} di Poli ${department === 'poli_umum' ? 'Umum' : 'Gigi'}`,
+      })
+
       setShowExamForm(false)
       setSelectedQueue(null)
       fetchQueue()

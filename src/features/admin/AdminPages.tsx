@@ -787,27 +787,353 @@ export const AdminMonitoring: React.FC = () => {
 }
 
 // ======================== Reports ========================
-export const Reports: React.FC = () => (
-  <PageLayout title="Laporan" subtitle="Export dan cetak laporan">
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-      {[
-        { title: 'Laporan Harian', desc: 'Ringkasan pasien dan obat hari ini', icon: <FileText size={32} />, type: 'daily' },
-        { title: 'Export Excel', desc: 'Data mentah per tabel', icon: <BarChart3 size={32} />, type: 'excel' },
-        { title: 'Backup Data', desc: 'Backup database klinik', icon: <Settings size={32} />, type: 'backup' },
-      ].map((report) => (
-        <Card key={report.type} hoverable onClick={() => useToastStore.getState().showToast(`Export ${report.type} - Coming soon!`, 'info')}>
+export const Reports: React.FC = () => {
+  const [showDailyReport, setShowDailyReport] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportTable, setExportTable] = useState('patients')
+  const [dailyData, setDailyData] = useState<any>(null)
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  const generateDailyReport = async () => {
+    setIsGenerating(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const tomorrow = new Date(new Date().getTime() + 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+
+      // Fetch visits today
+      const { data: visits } = await supabase
+        .from('patient_visits')
+        .select('*')
+        .gte('created_at', today)
+        .lt('created_at', tomorrow)
+
+      // Fetch queues today (for poli distribution)
+      const { data: queues } = await supabase
+        .from('queues')
+        .select('*')
+        .gte('created_at', today)
+        .lt('created_at', tomorrow)
+
+      // Fetch diagnoses today
+      const { data: diagnoses } = await supabase
+        .from('diagnoses')
+        .select('diagnosis')
+        .gte('created_at', today)
+        .lt('created_at', tomorrow)
+
+      // Fetch medicine items today (Obat and Alkes)
+      // Since medicine_transactions log all out movements, we can sum them up
+      const { data: medicineTx } = await supabase
+        .from('medicine_transactions')
+        .select('*, medicine:medicines(*, category:medicine_categories(*))')
+        .gte('created_at', today)
+        .lt('created_at', tomorrow)
+        .eq('transaction_type', 'out')
+
+      const totalVisits = visits?.length || 0
+      
+      const distribution = {
+        poli_umum: queues?.filter(q => q.department === 'poli_umum').length || 0,
+        poli_gigi: queues?.filter(q => q.department === 'poli_gigi').length || 0,
+        lab: queues?.filter(q => q.department === 'lab').length || 0,
+        pharmacy: queues?.filter(q => q.department === 'pharmacy').length || 0,
+      }
+
+      // Aggregate diagnoses
+      const diagCounts: Record<string, number> = {}
+      diagnoses?.forEach(d => {
+        if (d.diagnosis) {
+          diagCounts[d.diagnosis] = (diagCounts[d.diagnosis] || 0) + 1
+        }
+      })
+      const topDiagnoses = Object.entries(diagCounts).sort((a, b) => b[1] - a[1]).slice(0, 10)
+
+      // Aggregate medicines and alkes
+      const medCounts: Record<string, { name: string, qty: number, isAlkes: boolean, unit: string }> = {}
+      medicineTx?.forEach((tx: any) => {
+        if (tx.medicine) {
+          const isAlkes = tx.medicine.category?.name?.toLowerCase().includes('alkes') || false
+          const id = tx.medicine.id
+          if (!medCounts[id]) {
+            medCounts[id] = { name: tx.medicine.name, qty: 0, isAlkes, unit: tx.medicine.unit }
+          }
+          medCounts[id].qty += tx.quantity
+        }
+      })
+
+      const topMedicines = Object.values(medCounts)
+        .filter(m => !m.isAlkes)
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 10)
+
+      const topAlkes = Object.values(medCounts)
+        .filter(m => m.isAlkes)
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 10)
+
+      setDailyData({
+        totalVisits,
+        distribution,
+        topDiagnoses,
+        topMedicines,
+        topAlkes,
+        date: new Date().toLocaleDateString('id-ID')
+      })
+      setShowDailyReport(true)
+    } catch (err: any) {
+      useToastStore.getState().showToast(`Gagal memuat laporan harian: ${err.message}`, 'error')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const exportToCSV = async () => {
+    try {
+      const { data, error } = await supabase.from(exportTable).select('*')
+      if (error) throw error
+      if (!data || data.length === 0) {
+        useToastStore.getState().showToast('Tidak ada data untuk diekspor', 'warning')
+        return
+      }
+
+      // Convert to CSV
+      const keys = Object.keys(data[0])
+      const csvRows = []
+      csvRows.push(keys.join(',')) // Header
+      
+      for (const row of data) {
+        const values = keys.map(k => {
+          let val = row[k]
+          if (val === null || val === undefined) val = ''
+          if (typeof val === 'object') val = JSON.stringify(val)
+          // Escape quotes and wrap in quotes if contains comma
+          val = String(val).replace(/"/g, '""')
+          if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+            val = `"${val}"`
+          }
+          return val
+        })
+        csvRows.push(values.join(','))
+      }
+
+      const csvString = csvRows.join('\n')
+      const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      const url = URL.createObjectURL(blob)
+      link.setAttribute('href', url)
+      link.setAttribute('download', `${exportTable}_export_${new Date().getTime()}.csv`)
+      link.style.visibility = 'hidden'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      useToastStore.getState().showToast('Export berhasil!', 'success')
+      setShowExportModal(false)
+    } catch (err: any) {
+      useToastStore.getState().showToast(`Gagal export: ${err.message}`, 'error')
+    }
+  }
+
+  const handleBackup = async () => {
+    useToastStore.getState().showToast('Silakan gunakan fitur Export CSV untuk mem-backup data masing-masing tabel.', 'info')
+  }
+
+  return (
+    <PageLayout title="Laporan" subtitle="Export dan cetak laporan">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Card hoverable onClick={generateDailyReport}>
           <div className="text-center py-4">
             <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-primary-600">
-              {report.icon}
+              <FileText size={32} />
             </div>
-            <h3 className="text-title mb-1">{report.title}</h3>
-            <p className="text-sm text-surface-500">{report.desc}</p>
+            <h3 className="text-title mb-1">Laporan Harian</h3>
+            <p className="text-sm text-surface-500">Ringkasan pasien dan obat hari ini</p>
+            {isGenerating && <p className="text-xs text-primary-500 mt-2 animate-pulse">Membuat laporan...</p>}
           </div>
         </Card>
-      ))}
-    </div>
-  </PageLayout>
-)
+        
+        <Card hoverable onClick={() => setShowExportModal(true)}>
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-green-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-green-600">
+              <BarChart3 size={32} />
+            </div>
+            <h3 className="text-title mb-1">Export CSV</h3>
+            <p className="text-sm text-surface-500">Unduh data mentah per tabel (Excel)</p>
+          </div>
+        </Card>
+
+        <Card hoverable onClick={handleBackup}>
+          <div className="text-center py-4">
+            <div className="w-16 h-16 bg-surface-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-surface-600">
+              <Settings size={32} />
+            </div>
+            <h3 className="text-title mb-1">Backup Data</h3>
+            <p className="text-sm text-surface-500">Backup database klinik</p>
+          </div>
+        </Card>
+      </div>
+
+      <Modal isOpen={showExportModal} onClose={() => setShowExportModal(false)} title="Export Data CSV">
+        <div className="space-y-4">
+          <Select 
+            label="Pilih Tabel Data" 
+            value={exportTable}
+            onChange={(e) => setExportTable(e.target.value)}
+            options={[
+              { value: 'patients', label: 'Data Pasien (patients)' },
+              { value: 'patient_visits', label: 'Kunjungan Pasien (patient_visits)' },
+              { value: 'queues', label: 'Antrean (queues)' },
+              { value: 'diagnoses', label: 'Diagnosis Penyakit (diagnoses)' },
+              { value: 'medicines', label: 'Master Obat/Alkes (medicines)' },
+              { value: 'medicine_transactions', label: 'Riwayat Obat Keluar/Masuk (medicine_transactions)' },
+              { value: 'activity_logs', label: 'Log Aktivitas Petugas (activity_logs)' },
+            ]}
+          />
+          <div className="flex gap-3 justify-end pt-4">
+            <Button variant="outline" onClick={() => setShowExportModal(false)}>Batal</Button>
+            <Button variant="primary" onClick={exportToCSV}>Unduh CSV</Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showDailyReport} onClose={() => setShowDailyReport(false)} title="Laporan Harian" size="lg">
+        {dailyData && (
+          <div className="space-y-6" id="daily-report-content">
+            <div className="text-center mb-6">
+              <h2 className="text-xl font-bold">Laporan Harian Klinik</h2>
+              <p className="text-surface-500">Tanggal: {dailyData.date}</p>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+              <div className="bg-primary-50 p-3 rounded-xl border border-primary-100">
+                <p className="text-2xl font-bold text-primary-700">{dailyData.totalVisits}</p>
+                <p className="text-xs text-primary-600">Total Kunjungan</p>
+              </div>
+              <div className="bg-surface-50 p-3 rounded-xl border border-surface-200">
+                <p className="text-xl font-bold text-surface-700">{dailyData.distribution.poli_umum}</p>
+                <p className="text-xs text-surface-500">Poli Umum</p>
+              </div>
+              <div className="bg-surface-50 p-3 rounded-xl border border-surface-200">
+                <p className="text-xl font-bold text-surface-700">{dailyData.distribution.poli_gigi}</p>
+                <p className="text-xs text-surface-500">Poli Gigi</p>
+              </div>
+              <div className="bg-surface-50 p-3 rounded-xl border border-surface-200">
+                <p className="text-xl font-bold text-surface-700">{dailyData.distribution.lab}</p>
+                <p className="text-xs text-surface-500">Lab (Tes)</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-bold text-surface-800 mb-3 border-b pb-2">10 Penyakit Terbanyak (Top Diagnoses)</h3>
+                {dailyData.topDiagnoses.length === 0 ? (
+                  <p className="text-sm text-surface-500">Belum ada data diagnosa hari ini.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {dailyData.topDiagnoses.map(([diag, count]: [string, number], i: number) => (
+                      <li key={i} className="flex justify-between text-sm">
+                        <span className="truncate pr-2">{diag}</span>
+                        <span className="font-semibold text-surface-700">{count} kasus</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <h3 className="font-bold text-surface-800 mb-3 border-b pb-2">Penggunaan Obat Terbanyak</h3>
+                {dailyData.topMedicines.length === 0 ? (
+                  <p className="text-sm text-surface-500">Belum ada resep obat yang dikeluarkan.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {dailyData.topMedicines.map((med: any, i: number) => (
+                      <li key={i} className="flex justify-between text-sm">
+                        <span className="truncate pr-2">{med.name}</span>
+                        <span className="font-semibold text-surface-700">{med.qty} {med.unit}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-bold text-surface-800 mb-3 border-b pb-2">Penggunaan Alkes Terbanyak</h3>
+              {dailyData.topAlkes.length === 0 ? (
+                <p className="text-sm text-surface-500">Belum ada penggunaan alat kesehatan (alkes) yang tercatat.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {dailyData.topAlkes.map((alkes: any, i: number) => (
+                    <li key={i} className="flex justify-between text-sm">
+                      <span className="truncate pr-2">{alkes.name}</span>
+                      <span className="font-semibold text-surface-700">{alkes.qty} {alkes.unit}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-6 border-t">
+              <Button 
+                variant="primary" 
+                onClick={() => {
+                  const printContents = document.getElementById('daily-report-content')?.innerHTML
+                  if (printContents) {
+                    const printWindow = window.open('', '_blank')
+                    if (printWindow) {
+                      printWindow.document.write(`
+                        <html>
+                          <head>
+                            <title>Print Laporan Harian</title>
+                            <style>
+                              body { font-family: sans-serif; padding: 20px; }
+                              .text-center { text-align: center; }
+                              .font-bold { font-weight: bold; }
+                              .text-xl { font-size: 1.5rem; }
+                              .mb-6 { margin-bottom: 1.5rem; }
+                              .grid { display: grid; gap: 1rem; }
+                              .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+                              .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+                              .p-3 { padding: 0.75rem; }
+                              .border { border: 1px solid #e2e8f0; }
+                              .border-b { border-bottom: 1px solid #e2e8f0; }
+                              .rounded-xl { border-radius: 0.75rem; }
+                              .text-2xl { font-size: 1.5rem; }
+                              .text-xs { font-size: 0.75rem; }
+                              .text-sm { font-size: 0.875rem; }
+                              .pb-2 { padding-bottom: 0.5rem; }
+                              .mb-3 { margin-bottom: 0.75rem; }
+                              .flex { display: flex; }
+                              .justify-between { justify-content: space-between; }
+                              .space-y-2 > * + * { margin-top: 0.5rem; }
+                              .space-y-6 > * + * { margin-top: 1.5rem; }
+                              @media print {
+                                button { display: none !important; }
+                              }
+                            </style>
+                          </head>
+                          <body>
+                            ${printContents}
+                            <script>
+                              window.onload = () => { window.print(); window.close(); }
+                            </script>
+                          </body>
+                        </html>
+                      `)
+                      printWindow.document.close()
+                    }
+                  }
+                }}
+              >
+                Cetak Laporan
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </PageLayout>
+  )
+}
 
 // ======================== Settings ========================
 export const ClinicSettings: React.FC = () => (

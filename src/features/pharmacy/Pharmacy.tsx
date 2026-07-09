@@ -165,6 +165,12 @@ export const Pharmacy: React.FC = () => {
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', queue.visit_id)
 
+      await supabase.from('activity_logs').insert({
+        staff_id: currentStaff?.id,
+        action: 'pharmacy_dispense',
+        details: `Menyerahkan obat dan menyelesaikan kunjungan pasien: ${queue.patient?.name || ''}`,
+      })
+
       useToastStore.getState().showToast('Kunjungan selesai dan pelayanan obat diproses!', 'success')
       fetchPharmacyQueues()
       fetchMedicines()
@@ -199,7 +205,7 @@ export const Pharmacy: React.FC = () => {
       <body>
         <div class="center bold">DOCTEER</div>
         <div class="center bold">CAMP CLINIC</div>
-        <div class="center">Baksos Mahasiswa Kedokteran UMI Makassar</div>
+        <div class="center">Baksos Mahasiswa Makassar</div>
         <div class="divider"></div>
         <div class="flex"><span>Pasien:</span><span class="bold">${patientName}</span></div>
         <div class="flex"><span>Nomor:</span><span class="bold">${queue.queue_number}</span></div>
@@ -217,7 +223,6 @@ export const Pharmacy: React.FC = () => {
         <div class="divider"></div>
         <div class="center">** GRATIS - BAKTI SOSIAL **</div>
         <div class="center" style="margin-top:4px;">Semoga lekas sembuh!</div>
-        <div class="center" style="margin-top:8px; font-size:8px;">Dicetak oleh: ${currentStaff?.name || '-'}</div>
       </body>
       </html>
     `
